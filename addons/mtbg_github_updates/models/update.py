@@ -579,15 +579,24 @@ class MtbgGithubUpdate(models.Model):
         for batch in set(logs.mapped("batch")):
             batch_logs = logs.filtered(lambda l: l.batch == batch)
             modules = {m.name: m for m in Module.search([("name", "in", batch_logs.mapped("module"))])}
-            ready = all(
-                (m := modules.get(log.module)) and m.state == "installed"
-                and (log.kind == "install" or not log.to_version or m.latest_version == log.to_version)
-                for log in batch_logs)
-            if not ready:
+            if not all(self._mtbg_line_ready(log, modules.get(log.module)) for log in batch_logs):
                 _logger.info("Updates: batch %s needs an administrator to finish it", batch)
                 continue
             result = batch_logs._mtbg_apply()
             _logger.info("Updates: batch %s finished after the restart (%s)", batch, result)
+
+    @api.model
+    def _mtbg_line_ready(self, log, module):
+        """Nothing left for a module operation after the restart: a take-over (the same code, nothing to upgrade), a
+        module this database does not have installed (a store link of an uninstalled or retired one), an install the
+        process of its own made, an upgrade it made (the database at the new version)."""
+        if log.kind == "adopt":
+            return True
+        if log.kind == "install":
+            return bool(module) and module.state == "installed"
+        if not module or module.state == "uninstalled":
+            return True
+        return module.state == "installed" and (not log.to_version or module.latest_version == log.to_version)
 
     # ------------------------------------------------------------------ the progress screen
     @api.model

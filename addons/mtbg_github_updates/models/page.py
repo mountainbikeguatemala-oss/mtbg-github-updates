@@ -16,6 +16,8 @@ class MtbgGithubSource(models.Model):
     @api.model
     def mtbg_updates_page(self):
         self._mtbg_check_admin()
+        # a batch the restarted server runs, nobody on its progress screen and the jobs paused: finished here too
+        self.env["mtbg.github.update"]._cron_finish_restarted()
         self._mtbg_sync_declared()
         Module = self.env["ir.module.module"]
         sources = self.search([])

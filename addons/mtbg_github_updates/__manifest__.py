@@ -1,6 +1,6 @@
 {
     "name": "Updates from GitHub",
-    "version": "19.0.0.1.1",
+    "version": "19.0.0.1.2",
     "category": "Administration",
     "summary": "One Updates page for every product's extensions: from their GitHub releases, one module or a whole "
                "package, with backup, automatic and manual rollback",

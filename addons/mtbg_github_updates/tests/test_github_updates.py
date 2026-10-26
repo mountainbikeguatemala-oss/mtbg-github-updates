@@ -402,6 +402,30 @@ class TestGithubUpdates(TransactionCase):
         self.assertIsNone(store.active_version("mgu_demo_a"), "the work in progress stays the one loaded")
         self.assertEqual(store.active_version("mgu_demo_dep"), "19.0.0.1.0")
 
+    def test_restarted_batches_finished_by_the_job_alone(self):
+        """No progress screen open: the scheduled job of the restarted server finishes a take-over (with a linked module
+        this database does not have installed) and an upgrade the process of its own made."""
+        module = self.env.ref("base.module_mtbg_github_updates")
+        Batch = self.env["mtbg.github.batch"]
+        adopt = Batch.create({"name": "fin-adopt", "kind": "adopt"})
+        a1 = self.Update.create({"batch": "fin-adopt", "batch_id": adopt.id, "module": module.name, "kind": "adopt",
+                                 "from_version": "19.0.0.0.1", "to_version": "19.0.0.0.1", "switched_at": 1})
+        a2 = self.Update.create({"batch": "fin-adopt", "batch_id": adopt.id, "module": "mtbg_tours_customer360",
+                                 "kind": "adopt", "to_version": "19.0.0.3.2", "switched_at": 1})
+        upd = Batch.create({"name": "fin-upd", "kind": "update"})
+        u1 = self.Update.create({"batch": "fin-upd", "batch_id": upd.id, "module": module.name, "kind": "update",
+                                 "to_version": module.latest_version, "switched_at": 1})
+        later = self.Update.create({"batch": "fin-later", "module": module.name, "kind": "update",
+                                    "to_version": module.latest_version, "switched_at": time.time() + 3600})
+        with patch.object(type(module), "button_immediate_upgrade", side_effect=AssertionError("no module operation")):
+            self.Update._cron_finish_restarted()
+        self.assertEqual((a1.state, a2.state, u1.state), ("applied", "applied", "applied"))
+        self.assertEqual(later.state, "restarting", "switched after this process started: not restarted yet")
+        later.switched_at = 1
+        with patch.object(type(module), "button_immediate_upgrade", side_effect=AssertionError("no module operation")):
+            self.env["mtbg.github.source"].mtbg_updates_page()
+        self.assertEqual(later.state, "applied", "opening the Updates page finishes it too")
+
     def test_store_of_one_database(self):
         self.assertEqual(store.claim(self.env.cr.dbname, "u1"), "", "the first database to use it")
         self.assertEqual(store.claim(self.env.cr.dbname, "u1"), "")

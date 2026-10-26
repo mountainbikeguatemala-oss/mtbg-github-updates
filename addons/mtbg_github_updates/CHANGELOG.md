@@ -2,6 +2,14 @@
 
 Every version of this module, newest first. Tags: `git tag -l 'mtbg_github_updates-*'`.
 
+## 19.0.0.1.2 · 2026-10-26
+
+- **A restarted batch finishes by itself** (seen on DEV1 and DEV2: the take-over stayed "Restarting" until someone
+  finished it): the scheduled job waited for every module of a take-over to be installed at its version, and a store
+  links modules a database does not have installed (a retired one): a take-over, and a module not installed here,
+  now need nothing after the restart. Opening the Updates page finishes such batches too (sites whose jobs are
+  paused). A server restarted in place (the same process id) counts as restarted.
+
 ## 19.0.0.1.1 · 2026-10-26
 
 - **One store, one database**: the first database to use a store writes its name in it (owner.json); another
