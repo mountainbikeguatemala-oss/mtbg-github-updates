@@ -2,6 +2,14 @@
 
 Every version of this module, newest first. Tags: `git tag -l 'mtbg_github_updates-*'`.
 
+## 19.0.0.1.5 · 2026-10-26
+
+- The install dialog no longer lists a module both as coming along (a glue, a dependency) and as "left out: not on
+  this site".
+- The history says why a module came along as it is: "Required by <module>." for a dependency, else "Installed by
+  itself, needed by ...", "Released with ...", "Kept with ..." (it read "Installed (required by installed by itself,
+  needed by ...)").
+
 ## 19.0.0.1.4 · 2026-10-26
 
 - **The organization's repositories, one click away** (owner, 2026-10-26): the updater knows the Tours, Website

@@ -515,6 +515,15 @@ class MtbgGithubUpdate(models.Model):
             return bool(logs.search_count([("batch", "in", [b + "-back" for b in logs.mapped("batch")]),
                                            ("state", "=", "restarting")]))
 
+    def _mtbg_why(self):
+        """Why a line came along: "Required by <module>." (a dependency), else its reason as written ("installed by
+        itself, needed by ...", "released with ...", "kept with ...")."""
+        self.ensure_one()
+        why = self.required_by or ""
+        if store.MODULE_RE.match(why):
+            return _("Required by %s.", why)
+        return why[:1].upper() + why[1:] + "." if why else ""
+
     def _mtbg_prepare_restore(self, output):
         """A failed upgrade may have changed the database already (the process of its own commits module by module:
         a migration that ran cannot be undone by the old code), so the batch's backup comes back: the database, the
@@ -646,7 +655,7 @@ class MtbgGithubUpdate(models.Model):
             elif log.kind != "install":
                 message = _("Upgraded.")
             elif log.required_by:
-                message = _("Installed (required by %s).", log.required_by)
+                message = log._mtbg_why()
             else:
                 message = _("Installed.")
             log.write({"state": "applied", "message": message})
@@ -720,7 +729,7 @@ class MtbgGithubUpdate(models.Model):
         return [{"module": l.module, "kind": l.kind,
                  "from": _("new") if l.kind == "install" else l.from_version or "—",
                  "to": l.to_version or "—", "state": l.state,
-                 "message": l.message or (_("Required by %s.", l.required_by) if l.required_by else "")} for l in logs]
+                 "message": l.message or (l._mtbg_why() if l.required_by else "")} for l in logs]
 
     def action_cancel(self):
         """A batch stuck before its restart (the server was not restarted): switch back and forget it."""

@@ -505,6 +505,19 @@ class TestGithubUpdates(TransactionCase):
         self.assertIn("released with", everything["mgu_demo_a"][1])
         plan = self.env["mtbg.github.source"].mtbg_plan("install", [b.id])
         self.assertEqual({r["module"] for r in plan["rows"]}, set(everything), "the dialog shows the same")
+        package = self.src_tours.package_ids.filtered(lambda p: p.tag == "release-tours-20261026-2")
+        plan = self.env["mtbg.github.source"].mtbg_plan("package", [package.id])
+        self.assertIn("mgu_demo_dep", {s["module"] for s in plan["skipped"]}, "not here and not needed: left out")
+        dep = self.release(self.src_tours, "mgu_demo_dep-19.0.0.3.0")
+        a5 = self.release(self.src_tours, "mgu_demo_a-19.0.0.5.0")
+        with patch.object(type(self.Update), "_mtbg_full_plan",
+                          return_value=[("mgu_demo_a", a5, None), ("mgu_demo_dep", dep, "installed by itself, needed by x")]):
+            plan = self.env["mtbg.github.source"].mtbg_plan("package", [package.id])
+        brought = {r["module"] for r in plan["rows"]}
+        self.assertIn("mgu_demo_dep", brought)
+        self.assertFalse(brought & {s["module"] for s in plan["skipped"]}, "a module coming along is never 'left out'")
+        self.assertEqual(self.Update.create({"batch": "w", "module": "x", "kind": "install",
+                                             "required_by": "mgu_demo_b"})._mtbg_why(), "Required by mgu_demo_b.")
 
     def test_failed_upgrade_brings_the_backup_back(self):
         """A failed upgrade may have migrated the database already: the batch's backup (database, files, code)

@@ -140,7 +140,8 @@ class MtbgGithubSource(models.Model):
                      folder=store.shadowed_by(row["module"])) for row in rows if store.shadowed_by(row["module"])]
         return {"ok": not shadows, "problem": "\n".join(shadows), "rows": rows,
                 "skipped": [{"module": m, "version": r.version, "what": what} for m, r, what in
-                            (package._mtbg_plan() if package else []) if what != "update"]}
+                            (package._mtbg_plan() if package else [])
+                            if what != "update" and m not in {row["module"] for row in rows}]}
 
     @api.model
     def _mtbg_plan_of(self, kind, ids):
