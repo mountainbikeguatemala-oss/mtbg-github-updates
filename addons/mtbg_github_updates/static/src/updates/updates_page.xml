@@ -4,6 +4,9 @@
         <div class="o_action o_mgu_page h-100 overflow-auto">
             <div t-if="!state.data" class="p-4 text-muted"><i class="fa fa-spinner fa-spin me-1"/>Loading…</div>
             <div t-else="" class="container-lg py-4">
+                <div t-if="state.data.owner_problem" class="alert alert-danger" role="alert">
+                    <i class="fa fa-ban me-1"/><t t-esc="state.data.owner_problem"/>
+                </div>
                 <div t-if="state.data.restart_problem" class="alert alert-danger" role="alert" style="white-space: pre-line">
                     <i class="fa fa-exclamation-triangle me-1"/><t t-esc="state.data.restart_problem"/>
                 </div>
@@ -19,8 +22,12 @@
                             <t t-foreach="state.data.adopt.updaters" t-as="u" t-key="u.label"><t t-esc="u.label"/>: <t t-esc="u.count"/> versions. </t>
                             Nothing is reinstalled; their stores stay as they were.
                         </div>
+                        <div t-if="state.data.adopt.left.length" class="small mt-1">
+                            <div class="fw-bold">Left as they are (not taken over):</div>
+                            <div t-foreach="state.data.adopt.left" t-as="l" t-key="l.module"><t t-esc="l.module"/>: <t t-esc="l.why"/></div>
+                        </div>
                     </div>
-                    <button class="btn btn-primary" t-att-disabled="state.busy or !state.data.store.ready" t-on-click="takeOver">Take over</button>
+                    <button class="btn btn-primary" t-att-disabled="state.busy or !state.data.store.ready or state.data.owner_problem" t-on-click="takeOver">Take over</button>
                 </div>
 
                 <div class="d-flex align-items-center flex-wrap gap-2 mb-3">

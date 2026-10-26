@@ -375,3 +375,40 @@ class TestGithubUpdates(TransactionCase):
             Batch.mtbg_adopt()
             self.assertEqual(store.active_version("mgu_demo_a"), "19.0.0.3.0", "not taken back to the old store's")
         self.assertEqual(adopt.old_links(empty), {})
+
+    def test_take_over_leaves_work_in_progress_alone(self):
+        """A module loaded from another folder (a dev site's work in progress, after the old store in addons_path) is
+        not copied: with this store first, the copy would hide it."""
+        old = os.path.join(self.tmp, "old_wip")
+        for module in ("mgu_demo_a", "mgu_demo_dep"):
+            target = os.path.join(old, "store", "versions", module, "19.0.0.1.0", module)
+            os.makedirs(target)
+            with open(os.path.join(target, "__manifest__.py"), "w") as handle:
+                handle.write(MANIFEST % (module, "19.0.0.1.0", ["base"], ""))
+            os.makedirs(os.path.join(old, "store", "active"), exist_ok=True)
+            os.symlink(target, os.path.join(old, "store", "active", module))
+        active = os.path.realpath(os.path.join(old, "store", "active"))
+        Batch = self.env["mtbg.github.batch"].with_context(mtbg_no_restart=True)
+        loaded = {"mgu_demo_a": "/srv/dev-addons", "mgu_demo_dep": active}
+        with patch.dict(config.options, {"mtbg_updates_dir": old, "cfd_updates_dir": os.path.join(self.tmp, "none")}), \
+                patch.object(store, "in_addons_path", return_value=True), \
+                patch.object(store, "shadowed_by", return_value=None), \
+                patch.object(adopt, "loaded_folder", side_effect=lambda m: loaded.get(m, "")), \
+                patch.object(type(self.Update), "_mtbg_trigger_and_restart"):
+            page = self.env["mtbg.github.source"].mtbg_updates_page()
+            self.assertEqual([l["module"] for l in page["adopt"]["left"]], ["mgu_demo_a"])
+            self.assertIn("/srv/dev-addons", page["adopt"]["left"][0]["why"])
+            Batch.mtbg_adopt()
+        self.assertIsNone(store.active_version("mgu_demo_a"), "the work in progress stays the one loaded")
+        self.assertEqual(store.active_version("mgu_demo_dep"), "19.0.0.1.0")
+
+    def test_store_of_one_database(self):
+        self.assertEqual(store.claim(self.env.cr.dbname, "u1"), "", "the first database to use it")
+        self.assertEqual(store.claim(self.env.cr.dbname, "u1"), "")
+        problem = store.claim("another_site", "u2")
+        self.assertIn("belongs to the database %s" % self.env.cr.dbname, problem)
+        with patch.object(store, "claim", return_value=problem), \
+                patch.object(store, "in_addons_path", return_value=True):
+            with self.assertRaisesRegex(UserError, "belongs to the database"):
+                self.Update._mtbg_start([("mgu_demo_a", self.release(self.src_tours, "mgu_demo_a-19.0.0.2.0"))])
+            self.assertTrue(self.env["mtbg.github.source"].mtbg_updates_page()["owner_problem"])

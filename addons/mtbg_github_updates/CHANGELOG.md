@@ -2,6 +2,15 @@
 
 Every version of this module, newest first. Tags: `git tag -l 'mtbg_github_updates-*'`.
 
+## 19.0.0.1.1 · 2026-10-26
+
+- **One store, one database**: the first database to use a store writes its name in it (owner.json); another
+  database (two sites sharing a data_dir) is refused on the page and by every action, with how to fix it (its own
+  `mtbg_github_updates_dir`).
+- **Take over leaves work in progress alone**: only the modules Odoo loads from an old store are copied; one loaded
+  from another folder (a dev site's links after the old store) is listed "left as is" and never copied, so this
+  store, first in addons_path, never hides it.
+
 ## 19.0.0.1.0 · 2026-10-26
 
 - **One updater for every product** (owner, 2026-10-26): the Tours, the Communication Flow Designer and the website

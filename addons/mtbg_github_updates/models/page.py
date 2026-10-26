@@ -41,10 +41,14 @@ class MtbgGithubSource(models.Model):
         Batch = self.env["mtbg.github.batch"]
         adopt = Batch.mtbg_adopt_preview()
         return {
+            "owner_problem": self.env["mtbg.github.update"]._mtbg_owner_problem(),
             "restart_problem": reexec.restart_problem(self.env) or "",
             "store": {"ready": store.in_addons_path(), "active": store.active_dir(), "root": store.root()},
-            "adopt": {"todo": adopt["todo"], "updaters": [{"label": u["label"], "count": len(u["modules"])}
-                                                          for u in adopt["updaters"] if u["modules"]]},
+            "adopt": {"todo": adopt["todo"],
+                      "updaters": [{"label": u["label"], "count": sum(1 for m in u["modules"] if not m["problem"])}
+                                   for u in adopt["updaters"] if u["modules"]],
+                      "left": [{"module": m["module"], "why": m["problem"]} for u in adopt["updaters"]
+                               for m in u["modules"] if m["problem"] and not m["done"]]},
             "sections": sections,
             "history": [self._mtbg_batch_row(b) for b in Batch.search([("kind", "!=", "imported")], limit=20)],
         }

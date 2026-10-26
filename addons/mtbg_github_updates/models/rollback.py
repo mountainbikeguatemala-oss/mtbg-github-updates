@@ -96,7 +96,8 @@ class MtbgGithubBatch(models.Model):
         self.env["mtbg.github.update"]._mtbg_check_admin()
         self.ensure_one()
         later, back = self._mtbg_rollback_scope()
-        problems = [p for p in [self._mtbg_rollback_problem()] if p]
+        problems = [p for p in [self._mtbg_rollback_problem(),
+                                self.env["mtbg.github.update"]._mtbg_owner_problem()] if p]
         dbname = self.env.cr.dbname
         try:
             ok, problem = store.database_rights(dbname)
@@ -302,7 +303,10 @@ class MtbgGithubBatch(models.Model):
     @api.model
     def _cron_retention(self):
         """Backups: the last KEEP_BATCHES batches or KEEP_DAYS days, whichever keeps more, and the newest one before
-        each module's last update; a database kept by a rollback: KEEP_ROLLED_DB_DAYS days."""
+        each module's last update; a database kept by a rollback: KEEP_ROLLED_DB_DAYS days. Not in another
+        database's store."""
+        if self.env["mtbg.github.update"]._mtbg_owner_problem():
+            return
         batches = self.sudo().search([("backup_path", "!=", False), ("backup_purged", "=", False)], order="id desc")
         keep = batches[:KEEP_BATCHES]
         limit = fields.Datetime.now() - timedelta(days=KEEP_DAYS)

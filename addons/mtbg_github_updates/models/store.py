@@ -114,6 +114,31 @@ def shadowed_by(module):
     return None
 
 
+OWNER_FILE = "owner.json"
+
+
+def claim(dbname, dbuuid):
+    """The store belongs to one database (two sites sharing a data_dir would otherwise share it, each switching the
+    other's code). The first database to use it writes its name here; returns "" for it, else why it may not."""
+    import json
+    check_db(dbname)
+    os.makedirs(root(), exist_ok=True)
+    target = os.path.join(root(), OWNER_FILE)
+    try:
+        with open(target, encoding="utf-8") as handle:
+            owner = json.load(handle)
+    except FileNotFoundError:
+        with open(target, "w", encoding="utf-8") as handle:
+            json.dump({"database": dbname, "uuid": dbuuid or "", "since": time.strftime("%Y-%m-%d %H:%M:%S")}, handle)
+        return ""
+    except (OSError, ValueError) as error:
+        return "The store's owner file %s cannot be read (%s)." % (target, error)
+    if owner.get("database") != dbname:
+        return ("This update store (%s) belongs to the database %s, not %s: give this site its own folder "
+                "(mtbg_github_updates_dir in the server configuration)." % (root(), owner.get("database"), dbname))
+    return ""
+
+
 def ensure_dirs():
     for sub in ("keys", "mirrors", os.path.join("store", "versions"), os.path.join("store", "active"), "backups", "runs"):
         os.makedirs(os.path.join(root(), sub), exist_ok=True)

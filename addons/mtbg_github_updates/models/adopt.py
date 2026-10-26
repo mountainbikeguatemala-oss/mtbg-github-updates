@@ -32,6 +32,13 @@ def old_root(conf_key, folder):
     return config.get(conf_key) or os.path.join(config["data_dir"], folder)
 
 
+def loaded_folder(module):
+    """The folder (an addons path) Odoo loads ``module`` from in this process, or ""."""
+    from odoo.modules.module import get_module_path
+    found = get_module_path(module, display_warning=False)
+    return os.path.realpath(os.path.dirname(found)) if found else ""
+
+
 def old_links(root):
     """{module: version folder} an old store links to."""
     active = os.path.join(root, "store", "active")
@@ -61,14 +68,19 @@ class MtbgGithubBatch(models.Model):
         for key, label, conf_key, folder, source_model, table in OLD:
             root = old_root(conf_key, folder)
             links = old_links(root)
+            active = os.path.realpath(os.path.join(root, "store", "active"))
             modules = []
             for module, target in sorted(links.items()):
                 version = os.path.basename(os.path.dirname(target))
                 manifest = store.folder_manifest(target)
-                ok = store.VERSION_RE.match(version) and manifest.get("version") == version
+                problem = ""
+                if not (store.VERSION_RE.match(version) and manifest.get("version") == version):
+                    problem = _("its folder says version %s", manifest.get("version"))
+                elif module not in mine and loaded_folder(module) not in ("", active):
+                    # a copy before it in addons_path (a site's work in progress): left as is, never shadowed
+                    problem = _("loaded from %s: left as is", loaded_folder(module))
                 # in this store already (taken over, or updated here since): never taken from the old store again
-                modules.append({"module": module, "version": version, "done": module in mine,
-                                "problem": "" if ok else _("its folder says version %s", manifest.get("version"))})
+                modules.append({"module": module, "version": version, "done": module in mine, "problem": problem})
             sources = []
             if source_model in self.env:
                 sources = [{"name": s.name, "url": s.url} for s in self.env[source_model].sudo().search([])]
@@ -87,11 +99,12 @@ class MtbgGithubBatch(models.Model):
         name = uuid.uuid4().hex[:12]
         header = self.create({"name": name, "kind": "adopt", "title": _("Taken over from the earlier updaters")})
         lines = Update.browse()
+        skip = {m["module"] for u in preview["updaters"] for m in u["modules"] if m["problem"]}
         for key, label, conf_key, folder, _model, _table in OLD:
             for module, target in sorted(old_links(old_root(conf_key, folder)).items()):
                 version = os.path.basename(os.path.dirname(target))
-                if store.active_target(module):
-                    continue  # in this store already: an older copy in the old store must not come back
+                if store.active_target(module) or module in skip:
+                    continue  # in this store already, or loaded from elsewhere (work in progress): left as is
                 commit = ""
                 try:
                     with open(os.path.join(os.path.dirname(target), store.RELEASE_MARK)) as handle:

@@ -114,6 +114,9 @@ class MtbgGithubUpdate(models.Model):
     def _mtbg_check_ready(self):
         if not self.env.user.has_group("base.group_system"):
             raise UserError(_("Only administrators can update extensions."))
+        owner = self._mtbg_owner_problem()
+        if owner:
+            raise UserError(owner)
         problem = reexec.restart_problem(self.env)
         if problem:
             raise UserError(problem)
@@ -123,6 +126,15 @@ class MtbgGithubUpdate(models.Model):
         busy = self._mtbg_busy_elsewhere()
         if busy:
             raise UserError(busy)
+
+    @api.model
+    def _mtbg_owner_problem(self):
+        """Why this database may not use the store (another database's), or ""."""
+        uuid_ = self.env["ir.config_parameter"].sudo().get_param("database.uuid")
+        try:
+            return store.claim(self.env.cr.dbname, uuid_)
+        except store.StoreError as error:
+            return str(error)
 
     @api.model
     def _mtbg_busy_elsewhere(self):
