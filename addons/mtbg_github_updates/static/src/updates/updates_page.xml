@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="mtbg_github_updates.UpdatesPage">
+        <div class="o_action o_mgu_page h-100 overflow-auto">
+            <div t-if="!state.data" class="p-4 text-muted"><i class="fa fa-spinner fa-spin me-1"/>Loading…</div>
+            <div t-else="" class="container-lg py-4">
+                <div t-if="state.data.restart_problem" class="alert alert-danger" role="alert" style="white-space: pre-line">
+                    <i class="fa fa-exclamation-triangle me-1"/><t t-esc="state.data.restart_problem"/>
+                </div>
+                <div t-if="!state.data.store.ready" class="alert alert-warning" role="alert">
+                    <div class="fw-bold mb-1"><i class="fa fa-folder-open me-1"/>This server does not load updated versions yet</div>
+                    <div class="small mb-1">Put this folder FIRST in <code>addons_path</code> of the server configuration, then restart:</div>
+                    <code class="d-block text-break" t-esc="state.data.store.active"/>
+                </div>
+                <div t-if="state.data.adopt.todo" class="alert alert-info d-flex align-items-center gap-3 flex-wrap" role="alert">
+                    <div class="flex-grow-1">
+                        <div class="fw-bold">Take over from the earlier updaters</div>
+                        <div class="small">
+                            <t t-foreach="state.data.adopt.updaters" t-as="u" t-key="u.label"><t t-esc="u.label"/>: <t t-esc="u.count"/> versions. </t>
+                            Nothing is reinstalled; their stores stay as they were.
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" t-att-disabled="state.busy or !state.data.store.ready" t-on-click="takeOver">Take over</button>
+                </div>
+
+                <div class="d-flex align-items-center flex-wrap gap-2 mb-3">
+                    <div class="flex-grow-1">
+                        <h2 class="mb-0">Updates</h2>
+                        <div class="text-muted">New versions of your extensions, from their GitHub repositories.</div>
+                    </div>
+                    <div class="btn-group" role="group" aria-label="View">
+                        <button class="btn btn-secondary" t-att-class="{ active: state.tab === 'releases' }" t-on-click="() => this.setTab('releases')">Releases</button>
+                        <button class="btn btn-secondary" t-att-class="{ active: state.tab === 'modules' }" t-on-click="() => this.setTab('modules')">Modules</button>
+                    </div>
+                    <button class="btn btn-secondary" t-att-disabled="state.busy" t-on-click="check">
+                        <i t-attf-class="fa {{state.busy ? 'fa-spinner fa-spin' : 'fa-refresh'}} me-1"/>Check GitHub
+                    </button>
+                    <button class="btn btn-primary" t-att-disabled="state.busy or !updateCount" t-on-click="updateAll">
+                        <i class="fa fa-cloud-download me-1"/>Update all <span t-if="updateCount" class="badge text-bg-light ms-1" t-esc="updateCount"/>
+                    </button>
+                </div>
+
+                <div t-if="!state.data.sections.length" class="text-muted mb-4">No source yet: Check GitHub adds the repositories your extensions name.</div>
+
+                <!-- a section per source -->
+                <section t-foreach="state.data.sections" t-as="section" t-key="section.id" class="card mb-4 o_mgu_section">
+                    <div class="card-header d-flex align-items-center gap-3 flex-wrap">
+                        <i class="fa fa-github fa-2x"/>
+                        <div class="flex-grow-1 min-w-0">
+                            <div class="fw-bold" t-esc="section.name"/>
+                            <div class="small text-muted text-truncate" t-esc="section.url"/>
+                        </div>
+                        <div class="small text-end">
+                            <div>Checked <t t-esc="when(section.last_check)"/></div>
+                            <div class="text-muted"><t t-esc="section.releases"/> releases</div>
+                        </div>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-secondary" t-att-disabled="state.busy" t-on-click="() => this.testConnection(section)">Test connection</button>
+                            <button class="btn btn-outline-secondary" t-on-click="() => this.state.key = state.key === section.id ? null : section.id">Access</button>
+                            <button class="btn btn-outline-secondary" title="Settings of this source" t-on-click="() => this.editSource(section)"><i class="fa fa-cog"/></button>
+                        </div>
+                    </div>
+                    <div t-if="section.last_error" class="card-body py-2 small text-danger border-bottom"><i class="fa fa-exclamation-triangle me-1"/><t t-esc="section.last_error"/></div>
+                    <div t-if="state.key === section.id" class="card-body small border-bottom">
+                        <t t-if="section.https">
+                            <div class="mb-1">A read-only access token for this repository (fine-grained, Contents: read). It is kept in a file on the server.
+                                <span t-if="section.has_token" class="badge text-bg-success ms-1">Token saved</span></div>
+                            <div class="input-group input-group-sm" style="max-width: 520px">
+                                <input type="password" class="form-control" autocomplete="off" placeholder="github_pat_…"/>
+                                <button class="btn btn-outline-secondary" t-on-click="(ev) => this.saveToken(section, ev)">Save</button>
+                            </div>
+                        </t>
+                        <t t-elif="section.has_key">
+                            <div class="mb-1">Add this public key to the repository on GitHub as a <b>deploy key (read only)</b>, then Test connection.</div>
+                            <div class="d-flex gap-2 align-items-start">
+                                <code class="flex-grow-1 text-break o_mgu_key" t-esc="section.public_key"/>
+                                <button class="btn btn-sm btn-outline-secondary" t-on-click="() => this.copyKey(section)"><i class="fa fa-clipboard me-1"/>Copy</button>
+                            </div>
+                        </t>
+                        <t t-else="">
+                            No key yet (a public repository needs none).
+                            <button class="btn btn-sm btn-link" t-att-disabled="state.busy" t-on-click="() => this.createKey(section)">Create a key</button>
+                        </t>
+                    </div>
+
+                    <!-- packages: several modules released together -->
+                    <div t-if="state.tab === 'releases'" class="list-group list-group-flush">
+                        <div t-if="!section.packages.length" class="list-group-item small text-muted">No package release yet: see Modules.</div>
+                        <div t-foreach="section.packages" t-as="pkg" t-key="pkg.id" class="list-group-item">
+                            <div class="d-flex align-items-start gap-2 flex-wrap">
+                                <div class="flex-grow-1 min-w-0">
+                                    <div class="fw-bold" t-esc="pkg.name"/>
+                                    <div class="small text-muted"><t t-esc="when(pkg.date)"/><t t-if="pkg.tag"> · <t t-esc="pkg.tag"/></t></div>
+                                </div>
+                                <button t-if="pkg.todo" class="btn btn-sm btn-primary" t-att-disabled="state.busy" t-on-click="() => this.installPackage(pkg)">
+                                    <i class="fa fa-cloud-download me-1"/>Install this release (<t t-esc="pkg.todo"/>)</button>
+                                <span t-else="" class="small text-success"><i class="fa fa-check me-1"/>Nothing to install here</span>
+                            </div>
+                            <div class="d-flex flex-wrap gap-1 mt-2">
+                                <span t-foreach="pkg.modules" t-as="m" t-key="m.module"
+                                      t-attf-class="badge {{m.what === 'update' ? 'text-bg-primary' : 'text-bg-light'}}"
+                                      t-att-title="whatLabel(m.what)"><t t-esc="m.module"/> <t t-esc="m.version"/></span>
+                            </div>
+                            <a href="#" class="small" t-on-click.prevent="() => this.toggle('p' + pkg.id)">What's new</a>
+                            <div t-if="state.open['p' + pkg.id]" class="mt-2">
+                                <pre t-if="pkg.notes" class="small p-2 bg-light rounded o_mgu_notes" t-esc="pkg.notes"/>
+                                <div t-foreach="pkg.modules" t-as="m" t-key="m.module">
+                                    <t t-if="m.notes">
+                                        <div class="small fw-bold mt-1"><t t-esc="m.module"/> <t t-esc="m.version"/></div>
+                                        <pre class="small p-2 bg-light rounded o_mgu_notes mb-1" t-esc="m.notes"/>
+                                    </t>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- modules, each with its own newest version -->
+                    <table t-else="" class="table mb-0 align-middle">
+                        <thead><tr><th>Extension</th><th>Running</th><th>On GitHub</th><th/></tr></thead>
+                        <tbody>
+                            <tr t-if="!section.modules.length"><td colspan="4" class="small text-muted">None of its extensions is installed here.</td></tr>
+                            <t t-foreach="section.modules" t-as="module" t-key="module.id">
+                                <tr>
+                                    <td>
+                                        <div class="fw-bold" t-esc="module.title"/>
+                                        <div class="small text-muted" t-esc="module.name"/>
+                                    </td>
+                                    <td>
+                                        <span class="badge text-bg-light" t-esc="module.running or '—'"/>
+                                        <i t-if="!module.in_store" class="fa fa-info-circle text-muted ms-1" title="Not loaded from the update store"/>
+                                    </td>
+                                    <td>
+                                        <t t-if="module.newest">
+                                            <span t-attf-class="badge {{module.update ? 'text-bg-primary' : 'text-bg-light'}}" t-esc="module.newest"/>
+                                            <a t-if="module.notes" href="#" class="small ms-2" t-on-click.prevent="() => this.toggle('m' + module.id)">What's new</a>
+                                        </t>
+                                        <span t-else="" class="text-muted small">Not on GitHub</span>
+                                    </td>
+                                    <td class="text-end text-nowrap">
+                                        <button t-if="module.update" class="btn btn-sm btn-primary" t-att-disabled="state.busy"
+                                                t-on-click="() => this.update(module)"><i class="fa fa-cloud-download me-1"/>Update</button>
+                                        <span t-elif="module.newest" class="text-success small me-2"><i class="fa fa-check me-1"/>Up to date</span>
+                                        <button t-if="module.revert" class="btn btn-sm btn-link" t-att-disabled="state.busy"
+                                                t-on-click="() => this.goBack(module)"><i class="fa fa-undo me-1"/>Go back</button>
+                                    </td>
+                                </tr>
+                                <tr t-if="state.open['m' + module.id]">
+                                    <td colspan="4" class="bg-light"><pre class="mb-0 small o_mgu_notes" t-esc="module.notes"/></td>
+                                </tr>
+                            </t>
+                        </tbody>
+                    </table>
+
+                    <!-- released on GitHub, not on this site -->
+                    <div t-if="section.available.length" class="card-body border-top">
+                        <div class="small fw-bold mb-2">New on GitHub</div>
+                        <div t-foreach="section.available" t-as="item" t-key="item.id" class="d-flex align-items-center gap-2 mb-2">
+                            <div class="flex-grow-1 min-w-0">
+                                <span class="fw-bold" t-esc="item.title"/> <span class="badge text-bg-light" t-esc="item.version"/>
+                                <div class="small text-muted text-truncate"><t t-esc="item.name"/><t t-if="item.summary"> · <t t-esc="item.summary"/></t></div>
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary" t-att-disabled="state.busy" t-on-click="() => this.install(item)"><i class="fa fa-plus me-1"/>Install</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- the history: each update, its rollback -->
+                <div class="d-flex align-items-center mb-2">
+                    <h5 class="mb-0 flex-grow-1">History</h5>
+                    <a href="#" class="small" t-on-click.prevent="allHistory">Every extension's lines</a>
+                </div>
+                <div t-if="!state.data.history.length" class="text-muted small">No update yet.</div>
+                <div t-else="" class="list-group mb-4">
+                    <div t-foreach="state.data.history" t-as="batch" t-key="batch.id" class="list-group-item">
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="text-muted small text-nowrap" t-esc="when(batch.date)"/>
+                            <span class="fw-bold" t-esc="batch.title or batch.kind"/>
+                            <span t-if="batch.title" class="small text-muted" t-esc="batch.kind"/>
+                            <span t-if="stateLabel(batch.state)" t-attf-class="badge {{stateClass(batch.state)}}" t-esc="stateLabel(batch.state)"/>
+                            <span class="small text-muted" t-esc="batch.user"/>
+                            <span class="flex-grow-1"/>
+                            <a href="#" class="small" t-on-click.prevent="() => this.toggle('b' + batch.id)"><t t-esc="batch.lines.length"/> extensions</a>
+                            <button t-if="batch.can_roll_back" class="btn btn-sm btn-outline-danger" t-att-disabled="state.busy"
+                                    t-on-click="() => this.rollBack(batch)"><i class="fa fa-history me-1"/>Roll back</button>
+                        </div>
+                        <div t-if="batch.message" class="small text-muted mt-1 text-break" t-esc="batch.message"/>
+                        <table t-if="state.open['b' + batch.id]" class="table table-sm small mt-2 mb-0">
+                            <tbody>
+                                <tr t-foreach="batch.lines" t-as="line" t-key="line_index">
+                                    <td t-esc="line.module"/>
+                                    <td class="text-nowrap"><t t-esc="line.from or '—'"/> → <t t-esc="line.to or '—'"/></td>
+                                    <td><span t-attf-class="badge {{stateClass(line.state)}}" t-esc="line.state_label"/></td>
+                                    <td class="text-muted text-break" t-esc="line.message"/>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </t>
+
+    <t t-name="mtbg_github_updates.PlanDialog">
+        <Dialog title="props.title" size="'md'">
+            <div t-if="!props.plan.ok" class="alert alert-danger" style="white-space: pre-line" t-esc="props.plan.problem"/>
+            <t t-if="props.plan.rows">
+                <table class="table table-sm align-middle">
+                    <tbody>
+                        <tr t-foreach="props.plan.rows" t-as="row" t-key="row_index">
+                            <td t-esc="row.module"/>
+                            <td><span class="badge text-bg-light" t-esc="row.version"/></td>
+                            <td class="small text-muted" t-esc="row.why"/>
+                        </tr>
+                    </tbody>
+                </table>
+                <div t-if="props.plan.skipped and props.plan.skipped.length" class="small text-muted mb-2">
+                    Left out here: <t t-foreach="props.plan.skipped" t-as="s" t-key="s.module"><t t-esc="s.module"/> (<t t-esc="s.what === 'same' ? 'up to date' : 'not on this site'"/>) </t>
+                </div>
+                <div class="small text-muted">A database backup and a files snapshot are taken first; the site restarts (about half a minute without access). If the upgrade fails, the previous versions come back by themselves.</div>
+            </t>
+            <t t-set-slot="footer">
+                <button class="btn btn-primary" t-att-disabled="!props.plan.ok" t-on-click="go">Update now</button>
+                <button class="btn btn-secondary" t-on-click="() => this.props.close()">Cancel</button>
+            </t>
+        </Dialog>
+    </t>
+
+    <t t-name="mtbg_github_updates.RollbackDialog">
+        <Dialog title="'Roll back this update'" size="'lg'">
+            <t t-set="p" t-value="props.preview"/>
+            <div t-foreach="p.problems" t-as="problem" t-key="problem_index" class="alert alert-danger py-2" style="white-space: pre-line" t-esc="problem"/>
+            <p>The code, the database<t t-if="p.files"> and the files</t> go back to how they were on
+                <b t-esc="when(p.backup_at)"/>, before this update.</p>
+            <div t-if="!p.files" class="alert alert-warning py-2 small">No files snapshot was kept for this update: the files stay as they are now.</div>
+            <div class="fw-bold small">Updates undone</div>
+            <ul class="small"><li t-foreach="p.updates" t-as="u" t-key="u.name"><t t-esc="when(u.date)"/> · <t t-esc="u.title"/></li></ul>
+            <div class="fw-bold small">Extensions going back</div>
+            <table class="table table-sm small">
+                <tbody>
+                    <tr t-foreach="p.modules" t-as="m" t-key="m.module">
+                        <td t-esc="m.module"/>
+                        <td class="text-nowrap"><t t-esc="m.now or '—'"/> → <t t-if="m.removed">not installed</t><t t-else="" t-esc="m.back_to or '—'"/></td>
+                    </tr>
+                </tbody>
+            </table>
+            <div class="alert alert-danger py-2 small">
+                <div class="fw-bold">Lost: everything entered or changed since then.</div>
+                <div t-if="!p.data.length">No change found since the backup.</div>
+                <ul t-else="" class="mb-0"><li t-foreach="p.data" t-as="d" t-key="d_index"><t t-esc="d.count"/> × <t t-esc="d.what"/></li></ul>
+                <div class="mt-1">Emails sent and changes sent to other services since (Zoho, Stripe…) are not undone there.</div>
+            </div>
+            <div class="small text-muted mb-2">The database as it is now is kept a few days (as <t t-esc="p.database"/>_before_rollback_…), in case.</div>
+            <label class="form-label small">Type the database's name, <b t-esc="p.database"/>, to confirm</label>
+            <input class="form-control" autocomplete="off" t-model="state.typed"/>
+            <t t-set-slot="footer">
+                <button class="btn btn-danger" t-att-disabled="!ready" t-on-click="go">Roll back</button>
+                <button class="btn btn-secondary" t-on-click="() => this.props.close()">Cancel</button>
+            </t>
+        </Dialog>
+    </t>
+</templates>

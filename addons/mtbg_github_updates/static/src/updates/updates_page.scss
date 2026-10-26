@@ -1,0 +1,10 @@
+// the Updates page
+.o_mgu_page {
+    // the page's ground (Odoo's own variable: dark in dark mode)
+    background: var(--body-bg, #f9fafb);
+    .o_mgu_key,
+    .o_mgu_notes {
+        font-size: 0.75rem;
+        white-space: pre-wrap;
+    }
+}

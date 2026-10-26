@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="mtbg_github_updates.Progress">
+        <div class="o_action p-4 overflow-auto h-100">
+            <t t-if="restore">
+                <h2><i class="fa fa-history me-2"/>Rolling back</h2>
+                <p t-if="!state.done" class="text-muted">
+                    <i class="fa fa-spinner fa-spin me-1"/>
+                    <t t-if="state.offline">The site is restarting with the restored database…</t>
+                    <t t-elif="state.restore" t-esc="restoreLabel(state.restore.state)"/>
+                    <span class="ms-2 small">(<t t-esc="state.seconds"/> s)</span>
+                </p>
+                <div t-elif="failed" class="alert alert-danger">The rollback failed before anything changed: the site is as it was.
+                    <div class="small mt-1 text-break" t-esc="state.restore.message"/></div>
+                <div t-else="" class="alert alert-success">Done: the code, the database and the files are back to before that update. Reload.
+                    <div t-if="state.restore.message" class="small mt-1 text-break" t-esc="state.restore.message"/></div>
+                <table t-if="state.restore and state.restore.modules" class="table table-sm w-auto">
+                    <tbody>
+                        <tr t-foreach="state.restore.modules" t-as="m" t-key="m.module"><td t-esc="m.module"/><td>→ <t t-esc="m.back_to"/></td></tr>
+                    </tbody>
+                </table>
+            </t>
+            <t t-else="">
+                <h2><i class="fa fa-cloud-download me-2"/>Updating extensions</h2>
+                <p t-if="!state.done" class="text-muted">
+                    <i class="fa fa-spinner fa-spin me-1"/>
+                    <t t-if="state.offline">The site is restarting with the new versions…</t>
+                    <t t-elif="state.phase === 'busy'">Odoo is finishing a scheduled job; the upgrade starts right after…</t>
+                    <t t-elif="state.phase === 'waiting'">Waiting for the restart…</t>
+                    <t t-else="">Upgrading…</t>
+                    <span class="ms-2 small">(<t t-esc="state.seconds"/> s)</span>
+                </p>
+                <div t-elif="failed" class="alert alert-warning">An upgrade failed: the previous versions are back.
+                    The details are in the history.</div>
+                <div t-else="" class="alert alert-success">Done. Reload to use the new versions.</div>
+                <table class="table table-sm w-auto">
+                    <thead><tr><th>Extension</th><th>From</th><th>To</th><th>Status</th></tr></thead>
+                    <tbody>
+                        <tr t-foreach="state.lines" t-as="line" t-key="line_index">
+                            <td><t t-esc="line.module"/><span t-if="line.kind === 'rollback'" class="badge text-bg-light ms-1">automatic rollback</span></td>
+                            <td t-esc="line.from"/>
+                            <td t-esc="line.to"/>
+                            <td>
+                                <span t-attf-class="badge {{line.state === 'applied' ? 'text-bg-success' : line.state === 'failed' ? 'text-bg-danger' : 'text-bg-warning'}}"
+                                      t-esc="label(line.state)"/>
+                                <div t-if="line.message and line.state === 'failed'" class="small text-muted mt-1 text-break" t-esc="line.message.slice(0, 300)"/>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </t>
+            <div t-if="state.done" class="d-flex gap-2">
+                <button class="btn btn-primary" t-on-click="reload">Reload</button>
+                <button class="btn btn-secondary" t-on-click="page">Updates</button>
+            </div>
+        </div>
+    </t>
+</templates>

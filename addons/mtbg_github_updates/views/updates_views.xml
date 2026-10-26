@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- the one Updates page (static/src/updates); the lists below stay as actions for administrators -->
+    <record id="action_mtbg_github_updates" model="ir.actions.client">
+        <field name="name">Updates</field>
+        <field name="tag">mtbg_github_updates</field>
+        <field name="path">updates</field>
+    </record>
+    <menuitem id="menu_mtbg_github_updates" name="Updates" parent="base.menu_administration" sequence="60"
+              groups="base.group_system" action="action_mtbg_github_updates"/>
+
+    <record id="view_mtbg_github_source_form" model="ir.ui.view">
+        <field name="name">mtbg.github.source.form</field>
+        <field name="model">mtbg.github.source</field>
+        <field name="arch" type="xml">
+            <form string="Update Source">
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="code"/>
+                        <field name="url"/>
+                        <field name="subdir"/>
+                        <field name="short"/>
+                        <field name="module_patterns"/>
+                        <field name="active"/>
+                    </group>
+                    <group string="Status">
+                        <field name="last_check"/>
+                        <field name="last_error"/>
+                        <field name="release_count"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_mtbg_github_update_list" model="ir.ui.view">
+        <field name="name">mtbg.github.update.list</field>
+        <field name="model">mtbg.github.update</field>
+        <field name="arch" type="xml">
+            <list string="Update History" create="0" edit="0">
+                <field name="create_date" string="Date"/>
+                <field name="module"/>
+                <field name="kind"/>
+                <field name="from_version"/>
+                <field name="to_version"/>
+                <field name="state" widget="badge" decoration-success="state == 'applied'"
+                       decoration-danger="state == 'failed'" decoration-info="state == 'restarting'"/>
+                <field name="required_by" optional="hide"/>
+                <field name="user_id" optional="show"/>
+                <field name="message" optional="show"/>
+                <button name="action_finish" type="object" string="Finish update" invisible="state != 'restarting'"/>
+                <button name="action_cancel" type="object" string="Cancel" invisible="state != 'restarting'"
+                        confirm="Switch back to the previous version? (Restart the server afterwards.)"/>
+            </list>
+        </field>
+    </record>
+    <record id="action_mtbg_github_update_log" model="ir.actions.act_window">
+        <field name="name">Update History</field>
+        <field name="res_model">mtbg.github.update</field>
+        <field name="view_mode">list</field>
+    </record>
+</odoo>

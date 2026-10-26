@@ -1,0 +1,6 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_mtbg_github_source_admin,mtbg.github.source admin,model_mtbg_github_source,base.group_system,1,1,1,1
+access_mtbg_github_release_admin,mtbg.github.release admin,model_mtbg_github_release,base.group_system,1,1,1,1
+access_mtbg_github_package_admin,mtbg.github.package admin,model_mtbg_github_package,base.group_system,1,1,1,1
+access_mtbg_github_batch_admin,mtbg.github.batch admin,model_mtbg_github_batch,base.group_system,1,1,1,0
+access_mtbg_github_update_admin,mtbg.github.update admin,model_mtbg_github_update,base.group_system,1,1,1,0
