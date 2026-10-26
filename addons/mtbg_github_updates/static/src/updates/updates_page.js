@@ -141,6 +141,12 @@ export class MtbgGithubUpdatesPage extends Component {
         await this.load();
     }
 
+    async addKnown(known) {
+        await this.orm.call(SOURCE, "mtbg_add_known", [known.key]);
+        this.notification.add(_t("%s added: give it its deploy key (Access), then Check GitHub.", known.name), { type: "success" });
+        await this.load();
+    }
+
     async copyKey(section) {
         await browser.navigator.clipboard.writeText(section.public_key);
         this.notification.add(_t("Public key copied."), { type: "success" });

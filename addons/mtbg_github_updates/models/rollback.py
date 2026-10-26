@@ -194,7 +194,8 @@ class MtbgGithubBatch(models.Model):
     @api.model
     def _mtbg_restore_work(self, registry, plan, journal):
         """In a thread, after the answer reached the browser: maintenance, the backup into a new database, the swap,
-        the files, the code, the history, the restart. Before the swap, any failure leaves everything as it was."""
+        the files, the code, the history, the restart. Before the swap, any failure leaves everything as it was.
+        Returns whether the database was swapped (the server then restarts)."""
         dbname = plan["database"]
         time.sleep(1.5)
 
@@ -228,7 +229,7 @@ class MtbgGithubBatch(models.Model):
             except Exception:  # noqa: BLE001
                 _logger.exception("Updates: rollback %s: its failure not written", plan["restore"])
             maintenance.stop(dbname)
-            return
+            return False
         problems = []
         try:
             store.swap_filestore(dbname, plan["snapshot"], plan["keep_as"])
@@ -251,6 +252,7 @@ class MtbgGithubBatch(models.Model):
         if swapped:
             from odoo.service import server
             server.restart()
+        return swapped
 
     @api.model
     def _mtbg_write_history(self, plan):

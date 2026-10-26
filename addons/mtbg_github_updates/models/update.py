@@ -194,17 +194,23 @@ class MtbgGithubUpdate(models.Model):
         # a release may depend on a module this site does not have yet (from any source): it comes in the same batch
         if kind != "revert":
             self._mtbg_check_no_downgrade([(m, r, None) for m, r in plan])  # before anything is read or changed
-        grows = kind in ("update", "install", "package")
-        required = self._mtbg_new_dependencies(plan) if grows else []
-        required += self._mtbg_auto_installs(plan, required) if grows else []
-        everything = [(m, r, None) for m, r in plan] + required
+        everything = self._mtbg_full_plan(plan) if kind in ("update", "install", "package") else \
+            [(m, r, None) for m, r in plan]
+        required = everything[len(plan):]
         if kind != "revert":
             self._mtbg_check_no_downgrade(everything)
         self._mtbg_check_shadows([m for m, r, _b in everything if r])
         name = uuid.uuid4().hex[:12]
+        dbname = self.env.cr.dbname
+        live = not self.env.context.get("mtbg_no_restart")
+        if live:
+            # maintenance from before the backup: nothing a visitor enters can be lost by a rollback to it
+            maintenance.start(dbname, name)
         try:
-            backup, snapshot = store.backup_database(self.env.cr.dbname, name)
+            backup, snapshot = store.backup_database(dbname, name)
         except (store.StoreError, OSError, subprocess.SubprocessError) as error:
+            if live:
+                maintenance.stop(dbname)
             raise UserError(_("No update was made: the database backup failed (%s).", error)) from error
         header = self.env["mtbg.github.batch"].create({
             "name": name, "kind": kind, "package_id": package.id if package else False,
@@ -244,11 +250,45 @@ class MtbgGithubUpdate(models.Model):
         except (store.StoreError, OSError) as error:
             for module, before in reversed(done):
                 store.switch(module, before)
+            if live:
+                maintenance.stop(dbname)
             raise UserError(_("No update was made: %s", error)) from error
         self._mtbg_commit()
         logs._mtbg_upgrade_then_restart()
         return {"type": "ir.actions.client", "tag": "mtbg_github_progress", "params": {"batch": name},
                 "name": _("Updating")}
+
+    @api.model
+    def _mtbg_full_plan(self, plan):
+        """Everything a batch brings: [(module, release or None, why)], the plan first (why None). Then, until
+        nothing more comes: the new dependencies (from any source), the glues the batch completes, and the modules
+        RELEASED TOGETHER with a release it takes (its package's other modules this site has at an older version: a
+        release is made to run with them, e.g. a page-templates glue with the catalog that gave it its model)."""
+        entries = [(module, release, None) for module, release in plan]
+        while True:
+            names = {module for module, _r, _w in entries}
+            base = [(module, release) for module, release, _w in entries]
+            required = self._mtbg_new_dependencies(base)
+            required += self._mtbg_auto_installs(base, required)
+            more = [entry for entry in required if entry[0] not in names]
+            names |= {module for module, _r, _w in more}
+            siblings = self._mtbg_released_with([release for _m, release, _w in entries + more if release], names)
+            if not more and not siblings:
+                return entries
+            entries += more + siblings
+
+    @api.model
+    def _mtbg_released_with(self, releases, names):
+        """The modules released together with ``releases`` (their packages' other modules) that this site has at an
+        older version and that are not in ``names``: [(module, release, why)]."""
+        Package = self.env["mtbg.github.package"]
+        rows = []
+        for package in Package.search([("release_ids", "in", [r.id for r in releases])]):
+            for module, release, what in package._mtbg_plan():
+                if what == "update" and module not in names:
+                    names.add(module)
+                    rows.append((module, release, _("released with “%s”", package.name)))
+        return rows
 
     @api.model
     def _mtbg_installed(self):
@@ -320,11 +360,13 @@ class MtbgGithubUpdate(models.Model):
                 elif least:
                     raise UserError(_("No update was made: %(module)s %(version)s needs %(dep)s %(least)s or later, "
                                       "which no update source releases. Check GitHub first (or add its source).",
-                                      module=module, version=release.version, dep=dep, least=least))
+                                      module=module, version=release.version, dep=dep, least=least)
+                                    + self.env["mtbg.github.source"]._mtbg_known_hint())
                 else:
                     raise UserError(_("No update was made: %(module)s %(version)s needs %(dep)s, which this site does "
                                       "not have and no update source releases. Check GitHub first (or add its "
-                                      "source).", module=module, version=release.version, dep=dep))
+                                      "source).", module=module, version=release.version, dep=dep)
+                                    + self.env["mtbg.github.source"]._mtbg_known_hint())
         return required
 
     @api.model
@@ -447,6 +489,17 @@ class MtbgGithubUpdate(models.Model):
     def _mtbg_after_upgrade(self, registry, log_ids, ok, output, new, modules):
         """The upgrade's result: restart with the new code, or switch back (which restarts too). Returns whether a
         restart was asked for."""
+        restore = None
+        with registry.cursor() as cr:
+            logs = self.with_env(self.env(cr=cr)).browse(log_ids)
+            if not ok:
+                _logger.error("Updates: the upgrade of %s failed:\n%s", ", ".join(modules), output)
+                restore = logs._mtbg_prepare_restore(output)
+                cr.commit()
+        if restore:
+            # outside any cursor of this database: it is swapped for the backup's
+            if self.env["mtbg.github.batch"]._mtbg_restore_work(registry, *restore):
+                return True  # restored; the server restarts (in maintenance until then)
         with registry.cursor() as cr:
             logs = self.with_env(self.env(cr=cr)).browse(log_ids)
             if ok:
@@ -457,11 +510,38 @@ class MtbgGithubUpdate(models.Model):
                 from odoo.service import server
                 server.restart()
                 return True
-            _logger.error("Updates: the upgrade of %s failed, switching back:\n%s", ", ".join(modules), output)
             logs._mtbg_rollback(_("The upgrade failed; the previous version is back.\n%s", output))
             cr.commit()
             return bool(logs.search_count([("batch", "in", [b + "-back" for b in logs.mapped("batch")]),
                                            ("state", "=", "restarting")]))
+
+    def _mtbg_prepare_restore(self, output):
+        """A failed upgrade may have changed the database already (the process of its own commits module by module:
+        a migration that ran cannot be undone by the old code), so the batch's backup comes back: the database, the
+        files and the code, as before the batch; then the server restarts. Returns (plan, journal) for
+        ``_mtbg_restore_work``, or None without a backup (the code alone goes back then)."""
+        header = self[:1].batch_id
+        if not header or not header.backup_path or not os.path.isfile(header.backup_path):
+            return None
+        message = _("The upgrade failed: the database, the files and the code are back as before it.\n%s", output)
+        self.write({"state": "failed", "message": message[-4000:]})
+        header.message = message[-2000:]
+        Batch = self.env["mtbg.github.batch"]
+        dbname = self.env.cr.dbname
+        stamp = time.strftime("%Y%m%d%H%M%S")
+        history = Batch._mtbg_history_rows(header)
+        history.append({"batch": {"name": "rb-" + stamp, "kind": "restore", "title": _("Automatic rollback of %s",
+                                                                                           header.title or header.name),
+                                  "backup_path": "", "snapshot_path": "", "backup_at": None, "message": "",
+                                  "kept_database": "%s_before_rollback_%s" % (dbname[:30], stamp),
+                                  "created": fields.Datetime.to_string(fields.Datetime.now())}, "lines": []})
+        plan = {"restore": "rb-" + stamp, "of": header.name, "database": dbname, "dump": header.backup_path,
+                "snapshot": header.snapshot_path or "", "restored": "%s_restore_%s" % (dbname[:40], stamp),
+                "keep_as": "%s_before_rollback_%s" % (dbname[:30], stamp), "user": "auto",
+                "links": {log.module: log.previous_target or None for log in self},
+                "undone": [header.name], "history": history, "failed": True}
+        journal = Batch._mtbg_journal(dbname, plan["restore"], dict(plan, state="started"))
+        return plan, journal
 
     @api.model
     def _mtbg_trigger_and_restart(self):
@@ -544,11 +624,19 @@ class MtbgGithubUpdate(models.Model):
                 new.button_immediate_install()
             if modules:
                 modules.button_immediate_upgrade()
-        except Exception as error:  # noqa: BLE001 - any failure switches the code back
+        except Exception as error:  # noqa: BLE001 - any failure: the backup comes back (or the code alone)
             from odoo.modules import module as odoo_module
             if not odoo_module.current_test:
                 self.env.cr.rollback()
-            _logger.exception("Updates: upgrade failed, switching back")
+            _logger.exception("Updates: upgrade failed, going back")
+            logs = self.filtered(lambda l: l.kind != "rollback")
+            restore = logs._mtbg_prepare_restore(str(error)) if logs and not odoo_module.current_test else None
+            if restore:
+                self.env.cr.commit()
+                maintenance.start(self.env.cr.dbname, self[:1].batch or "")
+                registry, Batch = self.env.registry, self.env["mtbg.github.batch"]
+                threading.Thread(target=Batch._mtbg_restore_work, args=(registry, *restore), daemon=True).start()
+                return "failed"
             self._mtbg_rollback(str(error))
             return "failed"
         self._mtbg_commit()

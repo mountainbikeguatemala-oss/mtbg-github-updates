@@ -52,6 +52,7 @@ class MtbgGithubSource(models.Model):
                       "left": [{"module": m["module"], "why": m["problem"]} for u in adopt["updaters"]
                                for m in u["modules"] if m["problem"] and not m["done"]]},
             "sections": sections,
+            "known": [{"key": k["key"], "name": k["name"], "url": k["url"]} for k in self._mtbg_known_missing()],
             "history": [self._mtbg_batch_row(b) for b in Batch.search([("kind", "!=", "imported")], limit=20)],
         }
 
@@ -129,12 +130,12 @@ class MtbgGithubSource(models.Model):
         Update = self.env["mtbg.github.update"]
         plan, package = self._mtbg_plan_of(kind, ids)
         try:
-            required = Update._mtbg_new_dependencies(plan)
-            glues = Update._mtbg_auto_installs(plan, required)
+            everything = Update._mtbg_full_plan(plan)
+            Update._mtbg_check_no_downgrade(everything)
         except UserError as error:
             return {"ok": False, "problem": str(error.args[0] if error.args else error)}
-        rows = [{"module": m, "version": r.version if r else "", "why": ""} for m, r in plan]
-        rows += [{"module": m, "version": r.version if r else _("(on this server)"), "why": by} for m, r, by in required + glues]
+        rows = [{"module": m, "version": r.version if r else _("(on this server)"), "why": by or ""}
+                for m, r, by in everything]
         shadows = [_("%(module)s: %(folder)s comes before the store and has its own copy.", module=row["module"],
                      folder=store.shadowed_by(row["module"])) for row in rows if store.shadowed_by(row["module"])]
         return {"ok": not shadows, "problem": "\n".join(shadows), "rows": rows,

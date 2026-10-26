@@ -2,6 +2,24 @@
 
 Every version of this module, newest first. Tags: `git tag -l 'mtbg_github_updates-*'`.
 
+## 19.0.0.1.4 · 2026-10-26
+
+- **The organization's repositories, one click away** (owner, 2026-10-26): the updater knows the Tours, Website
+  Blocks, Communication Flow Designer and Updates repositories; the page offers those this site does not read yet
+  ("Add this source", never added on its own), and an update needing a module no source releases names them. (A site
+  whose modules still came from the Tours repository had no Website Blocks source: the pack's release was not listed.)
+- **A failed upgrade brings the batch's backup back** (batch 7 on DEV2 and DEV3): the upgrade's own process commits
+  module by module, so a migration that ran (content_blocks 0.9.0's) stayed when a later module failed, and the
+  switch-back to the old code could not load over it (the site's database and code out of step). Now the batch's
+  backup is restored (database, files, code), as a rollback does, then the server restarts; the code alone goes back
+  only without a backup. The site is in maintenance from before the backup, so nothing a visitor enters is lost.
+- **Released together, installed together**: a batch taking one module of a package (a release tag, or a commit with
+  several module tags) also takes that package's other modules this site has at an older version ("released with
+  ..."), with what they need. Batch 7: the page-templates glue pulled from the Tours release came without the catalog
+  0.6.0 its model came from.
+- **A module that moved repository**: its newest version is its newest release from any source that may offer it,
+  and it shows under that source (it showed only the old repository's tags until updated once).
+
 ## 19.0.0.1.3 · 2026-10-26
 
 - **Never an older version** (found on DEV4, nothing installed): a package compared its modules with the Tours

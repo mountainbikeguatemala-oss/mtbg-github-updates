@@ -171,6 +171,19 @@
                     </div>
                 </section>
 
+                <!-- the organization's repositories this site does not read yet -->
+                <div t-if="state.data.known.length" class="card mb-4">
+                    <div class="card-body py-2">
+                        <div class="small fw-bold mb-1">More repositories</div>
+                        <div t-foreach="state.data.known" t-as="k" t-key="k.key" class="d-flex align-items-center gap-2 mb-1">
+                            <i class="fa fa-github"/>
+                            <div class="flex-grow-1 min-w-0"><span t-esc="k.name"/> <span class="small text-muted text-truncate" t-esc="k.url"/></div>
+                            <button class="btn btn-sm btn-outline-secondary" t-att-disabled="state.busy" t-on-click="() => this.addKnown(k)">Add this source</button>
+                        </div>
+                        <div class="small text-muted">Then give it its deploy key (Access) and Check GitHub.</div>
+                    </div>
+                </div>
+
                 <!-- the history: each update, its rollback -->
                 <div class="d-flex align-items-center mb-2">
                     <h5 class="mb-0 flex-grow-1">History</h5>

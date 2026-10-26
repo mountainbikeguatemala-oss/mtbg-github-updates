@@ -464,6 +464,71 @@ class TestGithubUpdates(TransactionCase):
                 self.Update._mtbg_start([(module.name, old)])
         self.assertIsNone(store.active_version(module.name), "nothing switched")
 
+    def test_known_repositories_offered(self):
+        Source = self.env["mtbg.github.source"]
+        keys = [k["key"] for k in Source._mtbg_known_missing()]
+        self.assertIn("blocks", keys)
+        source = Source.browse(Source.mtbg_add_known("blocks"))
+        self.assertEqual((source.subdir, source.url.endswith("mtbg-website-blocks.git")), ("addons", True))
+        self.assertNotIn("blocks", [k["key"] for k in Source._mtbg_known_missing()], "once")
+        with self.assertRaises(UserError):
+            Source.mtbg_add_known("blocks")
+        known = [k["name"] for k in Source.mtbg_updates_page()["known"]]
+        self.assertNotIn("Website Blocks", known)
+        self.assertIn("MTBG Tours", known, "the others still offered")
+        self.assertIn("does not read yet", Source._mtbg_known_hint())
+
+    def test_moved_module_newest_from_any_source(self):
+        """A module released from its new repository: its newest there, though the installed manifest is the old
+        repository's (no key) and the old one's patterns still match it."""
+        module = self.env.ref("base.module_mtbg_github_updates")
+        Release = self.env["mtbg.github.release"]
+        Release.create({"source_id": self.src_tours.id, "module": module.name, "version": "19.0.5.0.0",
+                        "tag": module.name + "-19.0.5.0.0"})
+        moved = Release.create({"source_id": self.src_pack.id, "module": module.name, "version": "19.0.6.0.0",
+                                "tag": module.name + "-19.0.6.0.0"})
+        module.invalidate_recordset()
+        self.assertEqual((module.mgu_newest_release_id, module.mgu_source_id), (moved, self.src_pack))
+        self.assertTrue(module.mgu_update)
+
+    def test_released_together_installed_together(self):
+        """Batch 7's split (DEV2, DEV3): the pack's module pulled a glue from the Tours release, whose sibling (the
+        catalog the glue's model came from) must come too. Here: mgu_demo_b (pack) needs mgu_demo_dep (tours), whose
+        release is in package 2 with mgu_demo_a, which this site has older: it comes, and then the glue
+        completing a + dep."""
+        self.env["ir.module.module"].create({"name": "mgu_demo_a", "state": "installed",
+                                             "latest_version": "19.0.0.1.0", "shortdesc": "Demo A"})
+        b = self.release(self.src_pack, "mgu_demo_b-19.0.0.1.0")
+        everything = {m: (r.version if r else "", why) for m, r, why in self.Update._mtbg_full_plan([("mgu_demo_b", b)])}
+        self.assertEqual(set(everything), {"mgu_demo_b", "mgu_demo_dep", "mgu_demo_a", "mgu_demo_glue"})
+        self.assertEqual(everything["mgu_demo_a"][0], "19.0.0.5.0", "the package's newest")
+        self.assertIn("released with", everything["mgu_demo_a"][1])
+        plan = self.env["mtbg.github.source"].mtbg_plan("install", [b.id])
+        self.assertEqual({r["module"] for r in plan["rows"]}, set(everything), "the dialog shows the same")
+
+    def test_failed_upgrade_brings_the_backup_back(self):
+        """A failed upgrade may have migrated the database already: the batch's backup (database, files, code)
+        comes back, not the old code alone over the changed database."""
+        Batch = self.env["mtbg.github.batch"]
+        dump = os.path.join(store.root(), "backups", "fail.dump")
+        os.makedirs(os.path.dirname(dump), exist_ok=True)
+        open(dump, "w").close()
+        header = Batch.create({"name": "failb", "kind": "package", "backup_path": dump, "title": "Batch 7"})
+        line = self.Update.create({"batch": "failb", "batch_id": header.id, "module": "mgu_demo_a", "kind": "update",
+                                   "from_version": "19.0.0.1.0", "to_version": "19.0.0.2.0",
+                                   "previous_target": "/store/a/1", "switched_at": 1})
+        new = self.Update.create({"batch": "failb", "batch_id": header.id, "module": "mgu_demo_b", "kind": "install",
+                                  "to_version": "19.0.0.1.0", "switched_at": 1})
+        plan, journal = (line | new)._mtbg_prepare_restore("KeyError 'tag_ids'")
+        self.assertEqual(plan["dump"], dump)
+        self.assertEqual(plan["links"], {"mgu_demo_a": "/store/a/1", "mgu_demo_b": None})
+        self.assertTrue(os.path.isfile(journal))
+        self.assertEqual((line.state, new.state), ("failed", "failed"))
+        self.assertIn("database, the files and the code are back", line.message)
+        self.assertEqual([row["batch"]["kind"] for row in plan["history"]], ["package", "restore"])
+        header.backup_path = False
+        self.assertIsNone((line | new)._mtbg_prepare_restore("x"), "no backup: the code alone goes back")
+
     def test_store_of_one_database(self):
         self.assertEqual(store.claim(self.env.cr.dbname, "u1"), "", "the first database to use it")
         self.assertEqual(store.claim(self.env.cr.dbname, "u1"), "")

@@ -18,6 +18,20 @@ _logger = logging.getLogger(__name__)
 CODE_RE = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 REPO_RE = re.compile(r"^(git@github\.com:|https://github\.com/)(?P<owner>[A-Za-z0-9_.-]+)/(?P<name>[A-Za-z0-9_.-]+?)(\.git)?$")
 MANIFEST_KEY = "mtbg_github_source"
+# the organization's repositories (owner, 2026-10-26): the page offers those this site has no source for, with one
+# click (never added on their own); patterns: for releases made before their manifests named their repository
+KNOWN_SOURCES = (
+    {"key": "tours", "name": "MTBG Tours", "code": "tours", "subdir": "addons",
+     "url": "git@github.com:mountainbikeguatemala-oss/mtbg-tours.git", "module_patterns": "mtbg_tours*"},
+    {"key": "blocks", "name": "Website Blocks", "code": "website_blocks", "subdir": "addons",
+     "url": "git@github.com:mountainbikeguatemala-oss/mtbg-website-blocks.git",
+     "module_patterns": "mtbg_tours_bullets,mtbg_tours_content_blocks,mtbg_website_*,website_review_sync"},
+    {"key": "cfd", "name": "Communication Flow Designer", "code": "cfd", "subdir": "",
+     "url": "git@github.com:mountainbikeguatemala-oss/communication-flow-designer.git",
+     "module_patterns": "communication_flow_designer*,cfd_*,google_connector,meta_connector"},
+    {"key": "updates", "name": "Updates from GitHub", "code": "mtbg_github_updates", "subdir": "addons",
+     "url": "git@github.com:mountainbikeguatemala-oss/mtbg-github-updates.git", "module_patterns": "mtbg_github_*"},
+)
 # extensions retired (replaced by others): their old tags stay on GitHub for the sites that run them, but they are
 # never offered for a new install
 RETIRED = ("mtbg_tours_customer360", "mtbg_tours_sms")
@@ -144,6 +158,35 @@ class MtbgGithubSource(models.Model):
             created |= self.create({"name": name, "code": code, "url": repo, "subdir": subdir, "declared": True})
             _logger.info("Updates: source %s added (named by %s)", repo, module)
         return created
+
+    @api.model
+    def _mtbg_known_missing(self):
+        """The organization's repositories this site has no source for (archived ones count as there)."""
+        sources = self.with_context(active_test=False).search([])
+        return [known for known in KNOWN_SOURCES if not sources.filtered(lambda s: s._mtbg_is(known["url"]))]
+
+    @api.model
+    def mtbg_add_known(self, key):
+        """Add one of the organization's repositories as a source (then: its deploy key, Check GitHub)."""
+        self._mtbg_check_admin()
+        known = next((k for k in self._mtbg_known_missing() if k["key"] == key), None)
+        if not known:
+            raise UserError(_("This repository is a source already."))
+        code, n = known["code"], 2
+        while self.with_context(active_test=False).search_count([("code", "=", code)]):
+            code, n = "%s_%s" % (known["code"], n), n + 1
+        source = self.create({"name": known["name"], "code": code, "url": known["url"], "subdir": known["subdir"],
+                              "module_patterns": known["module_patterns"]})
+        return source.id
+
+    @api.model
+    def _mtbg_known_hint(self):
+        """For a missing dependency: the organization's repositories this site does not read yet."""
+        missing = self._mtbg_known_missing()
+        if not missing:
+            return ""
+        return " " + _("It may be released in a repository this site does not read yet: %s (Settings › Updates › "
+                       "Add this source).", ", ".join(k["name"] for k in missing))
 
     # ------------------------------------------------------------------ buttons
     def _mtbg_check_admin(self):

@@ -37,13 +37,16 @@ class IrModuleModule(models.Model):
         sources = Source.search([])
         for module in self:
             name = module.name or ""
-            source = Source._mtbg_source_of(name) if name and module.state != "uninstalled" else Source
+            # its newest release from any source that may offer it (a module that moved repository: its new one's,
+            # though the installed manifest is still the old one's)
+            newest = Release.search([("module", "=", name), ("source_id", "in", sources.ids)],
+                                    order="version_sort desc", limit=1) if name else Release
+            source = newest.source_id or (Source._mtbg_source_of(name) if name and module.state != "uninstalled"
+                                          else Source)
             module.mgu_source_id = source
             loaded, here = module._mgu_loaded() if store.MODULE_RE.match(name) else ("", False)
             module.mgu_in_store = here
             module.mgu_running_version = module._mgu_current()
-            newest = Release.search([("module", "=", name), ("source_id", "in", (source or sources).ids)],
-                                    order="version_sort desc", limit=1) if name else Release
             module.mgu_newest_release_id = newest
             module.mgu_update = bool(
                 newest and module.state == "installed"
