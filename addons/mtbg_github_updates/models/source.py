@@ -34,7 +34,7 @@ KNOWN_SOURCES = (
 )
 # extensions retired (replaced by others): their old tags stay on GitHub for the sites that run them, but they are
 # never offered for a new install
-RETIRED = ("mtbg_tours_customer360", "mtbg_tours_sms")
+RETIRED = ("mtbg_tours_customer360", "mtbg_tours_sms", "mtbg_tours_updates")
 
 
 def repo_key(url):

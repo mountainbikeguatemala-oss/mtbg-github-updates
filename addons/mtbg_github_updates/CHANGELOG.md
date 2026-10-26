@@ -2,6 +2,14 @@
 
 Every version of this module, newest first. Tags: `git tag -l 'mtbg_github_updates-*'`.
 
+## 19.0.0.1.6 · 2026-10-26
+
+- The Updates page opens on a family of extensions too (`action_mgu_open_updates(patterns, title)`, the page's
+  params `modules` + `title`): its modules, the packages and new releases that have one of them, their history,
+  "Update all" for them only; "Every extension" goes back. For the Tours Extensions card, the Logistics page and the
+  Zoho page, now that the Tours Updates page retires (owner, 2026-10-26).
+- The Tours Updates extension (mtbg_tours_updates) is retired: never offered for a new install.
+
 ## 19.0.0.1.5 · 2026-10-26
 
 - The install dialog no longer lists a module both as coming along (a glue, a dependency) and as "left out: not on

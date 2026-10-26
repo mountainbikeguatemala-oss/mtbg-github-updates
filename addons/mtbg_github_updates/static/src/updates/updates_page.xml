@@ -34,6 +34,10 @@
                     <div class="flex-grow-1">
                         <h2 class="mb-0">Updates</h2>
                         <div class="text-muted">New versions of your extensions, from their GitHub repositories.</div>
+                        <div t-if="patterns" class="mt-1">
+                            <span class="badge text-bg-info"><i class="fa fa-filter me-1"/>Showing: <t t-esc="familyTitle or patterns.join(', ')"/></span>
+                            <a href="#" class="small ms-2" t-on-click.prevent="showAll">Every extension</a>
+                        </div>
                     </div>
                     <div class="btn-group" role="group" aria-label="View">
                         <button class="btn btn-secondary" t-att-class="{ active: state.tab === 'releases' }" t-on-click="() => this.setTab('releases')">Releases</button>

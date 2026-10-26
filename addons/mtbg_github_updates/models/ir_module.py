@@ -1,4 +1,4 @@
-from odoo import _, fields, models
+from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 
 from . import store
@@ -51,6 +51,14 @@ class IrModuleModule(models.Model):
             module.mgu_update = bool(
                 newest and module.state == "installed"
                 and store.version_key(newest.version) > store.version_key(module.mgu_running_version))
+
+    @api.model
+    def action_mgu_open_updates(self, patterns=None, title=None):
+        """The Updates page, on a family of extensions (``patterns``) or on these modules."""
+        from .page import clean_patterns
+        patterns = clean_patterns(patterns or self.mapped("name"))
+        return {"type": "ir.actions.client", "tag": "mtbg_github_updates", "name": title or _("Updates"),
+                "params": {"modules": patterns, "title": title or ""}}
 
     def _search_mgu_update(self, operator, value):
         if operator not in ("=", "!=") or not isinstance(value, bool):

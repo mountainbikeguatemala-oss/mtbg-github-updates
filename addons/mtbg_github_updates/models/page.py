@@ -1,6 +1,9 @@
 """The one Updates page: a section per source (its packages, its modules, what is new on GitHub), the store's setup,
 the take-over from the earlier updaters, and the history with its rollbacks. Data and buttons only: the page is
 static/src/updates."""
+import fnmatch
+import re
+
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 
@@ -8,14 +11,31 @@ from . import reexec, store
 from .source import RETIRED
 
 KINDS_UNDOABLE = ("update", "install", "package", "revert")
+PATTERN_RE = re.compile(r"^[a-z0-9_*?]{1,80}$")
+
+
+def clean_patterns(patterns):
+    """A family of extensions the page opens on (e.g. the Logistics page's ["mtbg_tours_logistics*",
+    "mtbg_tours_rentals"]): module name patterns, * and ? allowed; empty: everything."""
+    patterns = [p.strip() for p in (patterns or []) if isinstance(p, str) and p.strip()]
+    if len(patterns) > 30 or not all(PATTERN_RE.match(p) for p in patterns):
+        raise UserError(_("Unexpected module filter."))
+    return patterns
+
+
+def matches(name, patterns):
+    return not patterns or any(fnmatch.fnmatchcase(name or "", p) for p in patterns)
 
 
 class MtbgGithubSource(models.Model):
     _inherit = "mtbg.github.source"
 
     @api.model
-    def mtbg_updates_page(self):
+    def mtbg_updates_page(self, patterns=None):
+        """Everything the page shows; ``patterns``: only a family of extensions (their modules, the packages and new
+        releases that have one of them, their history)."""
         self._mtbg_check_admin()
+        patterns = clean_patterns(patterns)
         # a batch the restarted server runs, nobody on its progress screen and the jobs paused: finished here too
         self.env["mtbg.github.update"]._cron_finish_restarted()
         self._mtbg_sync_declared()
@@ -29,7 +49,12 @@ class MtbgGithubSource(models.Model):
                 by_source[module.mgu_source_id.id] |= module
         sections = []
         for source in sources:
-            modules = by_source.get(source.id, Module).sorted("name")
+            modules = by_source.get(source.id, Module).sorted("name").filtered(lambda m: matches(m.name, patterns))
+            packages = source.package_ids.filtered(
+                lambda p: not patterns or any(matches(r.module, patterns) for r in p.release_ids))[:8]
+            available = [a for a in self._mtbg_available(source) if matches(a["name"], patterns)]
+            if patterns and not (modules or packages or available):
+                continue
             sections.append({
                 "id": source.id, "name": source.name, "url": source.url, "has_key": source.has_key,
                 "has_token": source.has_token, "public_key": source.public_key or "", "declared": source.declared,
@@ -37,8 +62,8 @@ class MtbgGithubSource(models.Model):
                 "last_check": fields.Datetime.to_string(source.last_check) if source.last_check else False,
                 "last_error": source.last_error or "", "releases": source.release_count,
                 "modules": [self._mtbg_module_row(m) for m in modules],
-                "packages": [self._mtbg_package_row(p) for p in source.package_ids[:8]],
-                "available": self._mtbg_available(source),
+                "packages": [self._mtbg_package_row(p) for p in packages],
+                "available": available,
             })
         Batch = self.env["mtbg.github.batch"]
         adopt = Batch.mtbg_adopt_preview()
@@ -53,7 +78,9 @@ class MtbgGithubSource(models.Model):
                                for m in u["modules"] if m["problem"] and not m["done"]]},
             "sections": sections,
             "known": [{"key": k["key"], "name": k["name"], "url": k["url"]} for k in self._mtbg_known_missing()],
-            "history": [self._mtbg_batch_row(b) for b in Batch.search([("kind", "!=", "imported")], limit=20)],
+            "history": [self._mtbg_batch_row(b) for b in Batch.search([("kind", "!=", "imported")], limit=60)
+                        if not patterns or any(matches(m, patterns) for m in b.line_ids.mapped("module"))][:20],
+            "patterns": patterns,
         }
 
     @api.model

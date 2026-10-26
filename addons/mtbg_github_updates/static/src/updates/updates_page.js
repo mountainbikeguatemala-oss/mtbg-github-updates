@@ -79,7 +79,20 @@ export class MtbgGithubUpdatesPage extends Component {
         if (status(this) === "destroyed") {
             return;
         }
-        this.state.data = await this.orm.call(SOURCE, "mtbg_updates_page", []);
+        this.state.data = await this.orm.call(SOURCE, "mtbg_updates_page", [], { patterns: this.patterns });
+    }
+
+    /** A family of extensions only (action.params: modules = name patterns, title), e.g. from the Logistics page. */
+    get patterns() {
+        return this.props.action?.params?.modules || null;
+    }
+
+    get familyTitle() {
+        return this.props.action?.params?.title || "";
+    }
+
+    showAll() {
+        return this.action.doAction("mtbg_github_updates.action_mtbg_github_updates");
     }
 
     setTab(tab) {
@@ -168,6 +181,10 @@ export class MtbgGithubUpdatesPage extends Component {
     }
 
     updateAll() {
+        if (this.patterns) {
+            const ids = this.state.data.sections.flatMap((s) => s.modules.filter((m) => m.update).map((m) => m.id));
+            return this.ask("modules", ids, _t("Update %s?", this.familyTitle || this.patterns.join(", ")));
+        }
         return this.ask("all", [], _t("Update every extension with a newer version?"));
     }
 
