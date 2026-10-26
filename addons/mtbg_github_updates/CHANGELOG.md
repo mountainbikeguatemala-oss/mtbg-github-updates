@@ -2,6 +2,16 @@
 
 Every version of this module, newest first. Tags: `git tag -l 'mtbg_github_updates-*'`.
 
+## 19.0.0.1.3 · 2026-10-26
+
+- **Never an older version** (found on DEV4, nothing installed): a package compared its modules with the Tours
+  updater's store links (its own field, by mistake), so on a site loading its modules from elsewhere 16 old packages
+  offered "Install this release", which would have put older versions first in addons_path. A module's current version
+  is now what this site has (the code Odoo loads, or the database's, the newer), everywhere; and a batch with a
+  version not newer than that is refused before anything changes (only Go back goes back).
+- **A glue comes only with the batch it completes**: a module installing itself with others (auto_install) joined
+  every plan when all its modules were installed; it now comes only when the batch brings or updates one of them.
+
 ## 19.0.0.1.2 · 2026-10-26
 
 - **A restarted batch finishes by itself** (seen on DEV1 and DEV2: the take-over stayed "Restarting" until someone

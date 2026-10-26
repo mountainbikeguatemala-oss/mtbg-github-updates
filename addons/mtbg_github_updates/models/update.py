@@ -156,6 +156,22 @@ class MtbgGithubUpdate(models.Model):
         return ""
 
     @api.model
+    def _mtbg_check_no_downgrade(self, everything):
+        """An update never puts a version older than (or the same as) the one this site has into the store, first in
+        addons_path: it would hide the newer code (only Go back does that, on purpose)."""
+        names = [m for m, r, _b in everything if r]
+        modules = {m.name: m for m in self.env["ir.module.module"].sudo().search(
+            [("name", "in", names), ("state", "in", ("installed", "to upgrade"))])}
+        older = []
+        for module, release, _by in everything:
+            current = modules[module]._mgu_current() if release and module in modules else ""
+            if current and store.version_key(release.version) <= store.version_key(current):
+                older.append(_("%(module)s %(version)s (this site has %(current)s)", module=module,
+                               version=release.version, current=current))
+        if older:
+            raise UserError(_("No update was made: these are not newer than what this site has:\n%s", "\n".join(older)))
+
+    @api.model
     def _mtbg_check_shadows(self, modules):
         problems = []
         for module in modules:
@@ -176,10 +192,14 @@ class MtbgGithubUpdate(models.Model):
             raise UserError(_("Choose at least one extension."))
         self.env["ir.module.module"].check_access("write")
         # a release may depend on a module this site does not have yet (from any source): it comes in the same batch
+        if kind != "revert":
+            self._mtbg_check_no_downgrade([(m, r, None) for m, r in plan])  # before anything is read or changed
         grows = kind in ("update", "install", "package")
         required = self._mtbg_new_dependencies(plan) if grows else []
         required += self._mtbg_auto_installs(plan, required) if grows else []
         everything = [(m, r, None) for m, r in plan] + required
+        if kind != "revert":
+            self._mtbg_check_no_downgrade(everything)
         self._mtbg_check_shadows([m for m, r, _b in everything if r])
         name = uuid.uuid4().hex[:12]
         try:
@@ -255,7 +275,7 @@ class MtbgGithubUpdate(models.Model):
         sources = self.env["mtbg.github.source"].search([])
         installed_modules = Module.search([("state", "in", ("installed", "to upgrade"))])
         installed = set(installed_modules.mapped("name"))
-        running = {m.name: m.mgu_running_version or m.latest_version or "" for m in installed_modules}
+        running = {m.name: m._mgu_current() or "" for m in installed_modules}
         planned = {module for module, _release in plan}
         planned_versions = {module: release.version if release else "" for module, release in plan}
         queue = [(module, release) for module, release in plan if release]
@@ -325,7 +345,7 @@ class MtbgGithubUpdate(models.Model):
         Module = self.env["ir.module.module"].sudo()
         installed_modules = Module.search([("state", "in", ("installed", "to upgrade"))])
         installed = set(installed_modules.mapped("name"))
-        running = {m.name: m.mgu_running_version or m.latest_version or "" for m in installed_modules}
+        running = {m.name: m._mgu_current() or "" for m in installed_modules}
         sources = self.env["mtbg.github.source"].search([])
         newest = {}
         for release in self.env["mtbg.github.release"].sudo().search([("source_id", "in", sources.ids)],
@@ -357,7 +377,9 @@ class MtbgGithubUpdate(models.Model):
                             store.version_key(release.version) <= store.version_key(running.get(module)):
                         continue
                     why = _("kept with %s", " + ".join(sorted(set(depends) & updated)))
-                elif all(dep in installed or dep in in_batch for dep in triggers):
+                elif set(depends) & in_batch and all(dep in installed or dep in in_batch for dep in depends) \
+                        and all(dep in installed or dep in in_batch for dep in triggers):
+                    # (only with a batch that brings or updates one of its modules, and every one of them there)
                     why = _("installed by itself, needed by %s",
                             " + ".join(dep for dep in triggers if dep != "base") or module)
                 else:

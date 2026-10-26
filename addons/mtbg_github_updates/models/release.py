@@ -141,8 +141,8 @@ class MtbgGithubPackage(models.Model):
             if not module:
                 rows.append((release.module, release, "not here"))
                 continue
-            running = module.mtbg_running_version or module.latest_version or ""
-            if store.version_key(release.version) > store.version_key(running):
+            # what this site has (the code loaded, the database's), never the earlier updaters' store links
+            if store.version_key(release.version) > store.version_key(module._mgu_current()):
                 rows.append((release.module, release, "update"))
             else:
                 rows.append((release.module, release, "same"))

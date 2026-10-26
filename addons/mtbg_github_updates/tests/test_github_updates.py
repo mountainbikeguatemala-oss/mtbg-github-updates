@@ -76,6 +76,12 @@ class TestGithubUpdates(TransactionCase):
         commit(cls.tours, "Stacked 1", "mgu_demo_dep-19.0.0.3.0")
         write_module(cls.tours, "mgu_demo_a", "19.0.0.5.0")
         commit(cls.tours, "Stacked 2", "mgu_demo_a-19.0.0.5.0", ("release-tours-20261026-2", "Batch 2\n\nStacked."))
+        # glues: one completing mgu_demo_a + mgu_demo_dep; one on modules every site has (base, web)
+        write_module(cls.tours, "mgu_demo_glue", "19.0.0.1.0", depends=("mgu_demo_a", "mgu_demo_dep"),
+                     extra=", 'auto_install': True")
+        commit(cls.tours, "Glue", "mgu_demo_glue-19.0.0.1.0")
+        write_module(cls.tours, "mgu_demo_glue_web", "19.0.0.1.0", depends=("base", "web"), extra=", 'auto_install': True")
+        commit(cls.tours, "Glue on web", "mgu_demo_glue_web-19.0.0.1.0")
         write_module(cls.pack, "mgu_demo_b", "19.0.0.1.0", depends=("base", "mgu_demo_dep"), extra=declared % cls.pack)
         write_module(cls.pack, "mgu_demo_moved", "19.0.0.1.0", extra=declared % cls.tours)
         commit(cls.pack, "Pack", "mgu_demo_b-19.0.0.1.0", "mgu_demo_moved-19.0.0.1.0")
@@ -84,7 +90,7 @@ class TestGithubUpdates(TransactionCase):
         Source = cls.env["mtbg.github.source"]
         Source.with_context(active_test=False).search([]).unlink()
         cls.src_tours = Source.create({"name": "Tours", "code": "tours", "url": cls.tours, "subdir": "addons",
-                                       "module_patterns": "mgu_demo_a,mgu_demo_dep,mgu_demo_moved"})
+                                       "module_patterns": "mgu_demo_a,mgu_demo_dep,mgu_demo_moved,mgu_demo_glue*"})
         cls.src_pack = Source.create({"name": "Pack", "code": "pack", "url": cls.pack, "subdir": "addons"})
         cls.src_tours._mtbg_refresh()
         cls.src_pack._mtbg_refresh()
@@ -425,6 +431,38 @@ class TestGithubUpdates(TransactionCase):
         with patch.object(type(module), "button_immediate_upgrade", side_effect=AssertionError("no module operation")):
             self.env["mtbg.github.source"].mtbg_updates_page()
         self.assertEqual(later.state, "applied", "opening the Updates page finishes it too")
+
+    def test_glue_only_with_the_batch_it_completes(self):
+        a5 = self.release(self.src_tours, "mgu_demo_a-19.0.0.5.0")
+        dep3 = self.release(self.src_tours, "mgu_demo_dep-19.0.0.3.0")
+        glues = lambda plan: [m for m, _r, _w in self.Update._mtbg_auto_installs(plan, [])]
+        self.assertEqual(glues([("mgu_demo_a", a5), ("mgu_demo_dep", dep3)]), ["mgu_demo_glue"])
+        self.assertEqual(glues([("mgu_demo_a", a5)]), [], "mgu_demo_dep neither installed nor in the batch")
+        b = self.release(self.src_pack, "mgu_demo_b-19.0.0.1.0")
+        self.assertNotIn("mgu_demo_glue_web", glues([("mgu_demo_b", b)]),
+                         "a glue whose modules are all installed does not join a batch that touches none of them")
+
+    def test_older_releases_never_offered_or_installed(self):
+        """A site loading a module from outside the store (a dev site, a bundled tree) at a newer version than an
+        old package: the package says up to date, and a batch with an older version is refused before anything."""
+        module = self.env.ref("base.module_mtbg_github_updates")
+        current = module._mgu_current()
+        self.assertTrue(current)
+        old = self.env["mtbg.github.release"].create({"source_id": self.src_tours.id, "module": module.name,
+                                                       "version": "19.0.0.0.1", "tag": module.name + "-19.0.0.0.1"})
+        new = self.env["mtbg.github.release"].create({"source_id": self.src_tours.id, "module": module.name,
+                                                       "version": "19.0.9.0.0", "tag": module.name + "-19.0.9.0.0"})
+        package = self.env["mtbg.github.package"].create({"source_id": self.src_tours.id, "commit": "f" * 40,
+                                                          "name": "Old", "release_ids": [(6, 0, old.ids)]})
+        self.assertEqual([what for _m, _r, what in package._mtbg_plan()], ["same"])
+        package.release_ids = [(6, 0, (old | new).ids)]
+        self.assertEqual([(r.version, what) for _m, r, what in package._mtbg_plan()], [("19.0.9.0.0", "update")],
+                         "the newest of a module in a package")
+        with patch.object(store, "in_addons_path", return_value=True), \
+                patch.object(store, "backup_database", return_value=("/x", "")):
+            with self.assertRaisesRegex(UserError, "not newer than what this site has"):
+                self.Update._mtbg_start([(module.name, old)])
+        self.assertIsNone(store.active_version(module.name), "nothing switched")
 
     def test_store_of_one_database(self):
         self.assertEqual(store.claim(self.env.cr.dbname, "u1"), "", "the first database to use it")
