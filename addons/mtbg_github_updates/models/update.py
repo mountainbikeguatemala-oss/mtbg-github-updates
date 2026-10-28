@@ -165,7 +165,7 @@ class MtbgGithubUpdate(models.Model):
         older = []
         for module, release, _by in everything:
             current = modules[module]._mgu_current() if release and module in modules else ""
-            if current and store.version_key(release.version) <= store.version_key(current):
+            if current and not modules[module]._mgu_offer(release.version):
                 older.append(_("%(module)s %(version)s (this site has %(current)s)", module=module,
                                version=release.version, current=current))
         if older:

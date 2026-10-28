@@ -552,3 +552,49 @@ class TestGithubUpdates(TransactionCase):
             with self.assertRaisesRegex(UserError, "belongs to the database"):
                 self.Update._mtbg_start([("mgu_demo_a", self.release(self.src_tours, "mgu_demo_a-19.0.0.2.0"))])
             self.assertTrue(self.env["mtbg.github.source"].mtbg_updates_page()["owner_problem"])
+
+    def test_release_notes_one_line_per_change(self):
+        """Owner, 2026-10-28: the notes of what will be installed, one line per change, from the commit message when
+        the tag says only its name (nothing typed by hand); on the confirmation and on each extension's row."""
+        repo = os.path.join(self.tmp, "notes")
+        os.makedirs(repo)
+        git(repo, "init", "-q")
+        write_module(repo, "mgu_demo_notes", "19.0.0.1.0")
+        commit(repo, "Faster pages: mgu_demo_notes 19.0.0.1.0\n\n- The list opens at once.\n- A long change that wraps\n"
+                     "  on two lines.\n\nCo-Authored-By: Someone <s@e>",
+               ("mgu_demo_notes-19.0.0.1.0", "mgu_demo_notes-19.0.0.1.0"))
+        source = self.env["mtbg.github.source"].create({"name": "Notes", "code": "notes", "url": repo, "subdir": "addons",
+                                                        "module_patterns": "mgu_demo_notes"})
+        source._mtbg_refresh()
+        release = source.release_ids
+        self.assertIn("The list opens at once.", release.notes, "the commit's message, the tag saying only its name")
+        self.assertEqual(release._mtbg_lines(), ["Faster pages: mgu_demo_notes 19.0.0.1.0", "The list opens at once.",
+                                                 "A long change that wraps on two lines."])
+        plan = self.env["mtbg.github.source"].mtbg_plan("install", [release.id])
+        self.assertEqual(plan["rows"][0]["lines"], release._mtbg_lines(), "the confirmation lists them")
+        release.notes = "mgu_demo_notes-19.0.0.1.0"  # listed before: the next check reads the commit's message
+        source._mtbg_refresh()
+        self.assertIn("The list opens at once.", release.notes)
+
+    def test_database_ahead_of_the_code_is_offered(self):
+        """DEV2, 2026-10-28: comms 0.5.18 ran from a dev link, the store never got it: the database says 0.5.18, the
+        code loaded is older: the release of the database's version is offered (it was "the same")."""
+        module = self.env.ref("base.module_mtbg_github_updates")
+        loaded, _here = module._mgu_loaded()
+        self.assertFalse(module._mgu_offer(loaded), "the code loaded is the database's: nothing to offer")
+        module.latest_version = "19.0.9.0.0"
+        release = self.env["mtbg.github.release"].create({"source_id": self.src_tours.id, "module": module.name,
+                                                           "version": "19.0.9.0.0", "tag": module.name + "-19.0.9.0.0"})
+        self.assertTrue(module._mgu_offer("19.0.9.0.0"))
+        self.assertFalse(module._mgu_offer("19.0.0.0.1"), "never older")
+        package = self.env["mtbg.github.package"].create({"source_id": self.src_tours.id, "commit": "e" * 40,
+                                                          "name": "Ahead", "release_ids": [(6, 0, release.ids)]})
+        self.assertEqual([what for _m, _r, what in package._mtbg_plan()], ["update"])
+        self.Update._mtbg_check_no_downgrade([(module.name, release, None)])  # not refused
+
+    def test_uninstalled_glue_offered(self):
+        """Owner, 2026-10-28 (www: cfd_website_visitors): a glue whose modules are all installed, not installed
+        itself, is offered on "New on GitHub"; one whose modules are missing still waits for them."""
+        names = [row["name"] for row in self.env["mtbg.github.source"]._mtbg_available(self.src_tours)]
+        self.assertIn("mgu_demo_glue_web", names)
+        self.assertNotIn("mgu_demo_glue", names, "its modules are not installed: it comes with them")

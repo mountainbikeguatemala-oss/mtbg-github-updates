@@ -272,10 +272,14 @@ class MtbgGithubSource(models.Model):
                     notes = store.tag_notes(self.code, self.url, tag)
                 except store.StoreError:
                     notes = ""
+                if not notes or notes.strip() == tag:  # a tag saying only its name: the commit's message says it
+                    notes = store.commit_message(self.code, self.url, commit)
                 changes = store.changelog_section(self.code, self.url, self.subdir or "", module, tag, version)
                 release = Release.create(dict(values, source_id=self.id, tag=tag, module=module, version=version,
                                               notes=notes, changelog=changes))
             else:
+                if not release.notes or release.notes.strip() == tag:  # listed before the commit's message was read
+                    values["notes"] = store.commit_message(self.code, self.url, commit) or release.notes
                 release.write(values)
             seen.add(tag)
             by_commit.setdefault(commit, Release)

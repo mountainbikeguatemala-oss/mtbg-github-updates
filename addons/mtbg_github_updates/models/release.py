@@ -7,10 +7,14 @@
   the module tags on that same commit); a commit carrying two module tags or more and no release tag is a package
   too, untitled (the commit's subject)."""
 import os
+import re
 
 from odoo import _, api, fields, models
 
 from . import store
+
+TRAILER_RE = re.compile(r"^(Co-Authored-By|Signed-off-by|Reviewed-by):", re.I)
+BULLET_RE = re.compile(r"^[-*•]\s+")
 
 
 class MtbgGithubRelease(models.Model):
@@ -54,9 +58,24 @@ class MtbgGithubRelease(models.Model):
         return store.release_manifest(source.code, source.url, source.subdir or "", self.module, self.tag)
 
     def _mtbg_text(self):
-        """What is new in this release, for the page: its CHANGELOG section, else the tag's message."""
+        """What is new in this release, for the page: its CHANGELOG section, else the tag's (or commit's) message."""
         self.ensure_one()
         return self.changelog or self.notes or ""
+
+    def _mtbg_lines(self):
+        """The release notes one line per change (owner, 2026-10-28): from the commit messages and tags, nothing
+        typed by hand; a bullet's wrapped lines joined, trailers (Co-Authored-By...) and the bare tag name left out."""
+        self.ensure_one()
+        lines = []
+        for raw in (self._mtbg_text() or "").splitlines():
+            text = raw.strip()
+            if not text or text == self.tag or TRAILER_RE.match(text):
+                continue
+            if raw[:1] in (" ", "\t") and lines and not BULLET_RE.match(text):
+                lines[-1] = f"{lines[-1]} {text}"  # the rest of a wrapped bullet
+                continue
+            lines.append(BULLET_RE.sub("", text))
+        return lines
 
 
 class MtbgGithubPackage(models.Model):
@@ -142,7 +161,7 @@ class MtbgGithubPackage(models.Model):
                 rows.append((release.module, release, "not here"))
                 continue
             # what this site has (the code loaded, the database's), never the earlier updaters' store links
-            if store.version_key(release.version) > store.version_key(module._mgu_current()):
+            if module._mgu_offer(release.version):
                 rows.append((release.module, release, "update"))
             else:
                 rows.append((release.module, release, "same"))

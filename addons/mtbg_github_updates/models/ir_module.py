@@ -31,6 +31,17 @@ class IrModuleModule(models.Model):
         loaded, _here = self._mgu_loaded()
         return max(loaded or "", self.latest_version or "", key=store.version_key) or False
 
+    def _mgu_offer(self, version):
+        """Whether ``version`` is to be put in the store for this module: newer than what this site has, or the
+        database's own version while the code loaded is older (DEV2, 2026-10-28: comms 0.5.18 ran from a dev link,
+        the store never got it; "the same" left the site without that code)."""
+        key = store.version_key(version)
+        if key > store.version_key(self._mgu_current()):
+            return True
+        loaded, _here = self._mgu_loaded()
+        return bool(self.latest_version and key == store.version_key(self.latest_version)
+                    and store.version_key(loaded or "") < key)
+
     def _compute_mgu(self):
         Source = self.env["mtbg.github.source"]
         Release = self.env["mtbg.github.release"]
@@ -48,9 +59,7 @@ class IrModuleModule(models.Model):
             module.mgu_in_store = here
             module.mgu_running_version = module._mgu_current()
             module.mgu_newest_release_id = newest
-            module.mgu_update = bool(
-                newest and module.state == "installed"
-                and store.version_key(newest.version) > store.version_key(module.mgu_running_version))
+            module.mgu_update = bool(newest and module.state == "installed" and module._mgu_offer(newest.version))
 
     @api.model
     def action_mgu_open_updates(self, patterns=None, title=None):

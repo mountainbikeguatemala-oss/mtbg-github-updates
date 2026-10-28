@@ -2,6 +2,17 @@
 
 Every version of this module, newest first. Tags: `git tag -l 'mtbg_github_updates-*'`.
 
+## 19.0.0.1.7 · 2026-10-28
+
+- **Release notes, one line per change** (owner, 2026-10-28): the update's confirmation lists, under each extension
+  it installs, what is new in that version; each extension's row shows its most recent notes. They come from the
+  release's commit message when its tag says no more than its name (nothing typed by hand); trailers left out.
+- A version number is copied to the clipboard on a click.
+- The database ahead of the code: a module whose database already has a version the code loaded does not (DEV2:
+  Communications 0.5.18 ran from a dev link, the store never got it) is offered that version; it was "up to date".
+- An uninstalled glue (auto_install) whose modules are all installed is offered on "New on GitHub" (www:
+  cfd_website_visitors could only come back with Apps › Update Apps List).
+
 ## 19.0.0.1.6 · 2026-10-26
 
 - The Updates page opens on a family of extensions too (`action_mgu_open_updates(patterns, title)`, the page's

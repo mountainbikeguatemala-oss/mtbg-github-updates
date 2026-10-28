@@ -91,6 +91,7 @@ class MtbgGithubSource(models.Model):
                 "icon": m.icon or "/base/static/description/icon.png", "running": m.mgu_running_version or "",
                 "in_store": m.mgu_in_store, "newest": newest.version or "", "release_id": newest.id or False,
                 "notes": newest._mtbg_text() if newest else "", "update": m.mgu_update,
+                "lines": newest._mtbg_lines() if newest else [],
                 "revert": revert.from_version if revert and revert.kind == "update" else False}
 
     @api.model
@@ -118,8 +119,11 @@ class MtbgGithubSource(models.Model):
                 manifest = release._mtbg_manifest()
             except store.StoreError:
                 continue
-            if not manifest.get("installable", True) or manifest.get("auto_install") or manifest.get("category") == "Hidden":
-                continue  # a glue comes by itself with what it links; a hidden one is an empty hand-over shell
+            if not manifest.get("installable", True) or manifest.get("category") == "Hidden":
+                continue  # a hidden one is an empty hand-over shell
+            if manifest.get("auto_install") and not set(manifest.get("depends") or []) <= installed:
+                continue  # a glue comes by itself with what it links; once they are all here (it was uninstalled,
+                # or is new): offered, it would not come by itself again (owner, 2026-10-28: cfd_website_visitors)
             rows.append({"id": release.id, "name": module, "version": release.version,
                          "title": (manifest.get("name") or module).split("—")[-1].strip(),
                          "summary": manifest.get("summary") or "", "notes": release._mtbg_text()})
@@ -161,8 +165,9 @@ class MtbgGithubSource(models.Model):
             Update._mtbg_check_no_downgrade(everything)
         except UserError as error:
             return {"ok": False, "problem": str(error.args[0] if error.args else error)}
-        rows = [{"module": m, "version": r.version if r else _("(on this server)"), "why": by or ""}
-                for m, r, by in everything]
+        # what will be installed, one line per change (owner, 2026-10-28)
+        rows = [{"module": m, "version": r.version if r else _("(on this server)"), "why": by or "",
+                 "lines": r._mtbg_lines() if r else []} for m, r, by in everything]
         shadows = [_("%(module)s: %(folder)s comes before the store and has its own copy.", module=row["module"],
                      folder=store.shadowed_by(row["module"])) for row in rows if store.shadowed_by(row["module"])]
         return {"ok": not shadows, "problem": "\n".join(shadows), "rows": rows,

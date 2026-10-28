@@ -21,11 +21,32 @@ function when(value) {
     return value ? formatDateTime(deserializeDateTime(value)) : _t("never");
 }
 
-/** A batch's confirmation: the extensions it brings (and why), or why it cannot run. */
+/** A version number clicked: copied to the clipboard (owner, 2026-10-28). */
+async function copyVersion(notification, version) {
+    if (!version) {
+        return;
+    }
+    try {
+        await browser.navigator.clipboard.writeText(version);
+        notification.add(_t("Copied: %s", version), { type: "success" });
+    } catch {
+        notification.add(_t("Could not copy %s", version), { type: "warning" });
+    }
+}
+
+/** A batch's confirmation: the extensions it brings (and why) with their release notes, or why it cannot run. */
 export class PlanDialog extends Component {
     static template = "mtbg_github_updates.PlanDialog";
     static components = { Dialog };
     static props = ["close", "title", "plan", "confirm"];
+
+    setup() {
+        this.notification = useService("notification");
+    }
+
+    copy(version) {
+        return copyVersion(this.notification, version);
+    }
 
     async go() {
         this.props.close();
@@ -64,6 +85,7 @@ export class MtbgGithubUpdatesPage extends Component {
         this.action = useService("action");
         this.notification = useService("notification");
         this.dialog = useService("dialog");
+        this.copy = (version) => copyVersion(this.notification, version);
         let tab = "releases";
         try {
             tab = browser.localStorage.getItem(TAB_KEY) || "releases";

@@ -135,15 +135,21 @@
                                     <td>
                                         <div class="fw-bold" t-esc="module.title"/>
                                         <div class="small text-muted" t-esc="module.name"/>
+                                        <!-- its most recent release notes, one line per change (owner, 2026-10-28) -->
+                                        <ul t-if="module.lines and module.lines.length" class="small mb-0 mt-1 ps-3 o_mgu_lines">
+                                            <li t-foreach="module.lines" t-as="line" t-key="line_index" t-esc="line"/>
+                                        </ul>
                                     </td>
                                     <td>
-                                        <span class="badge text-bg-light" t-esc="module.running or '—'"/>
+                                        <span class="badge text-bg-light o_mgu_version" t-esc="module.running or '—'" title="Click to copy"
+                                              t-on-click="() => this.copy(module.running)"/>
                                         <i t-if="!module.in_store" class="fa fa-info-circle text-muted ms-1" title="Not loaded from the update store"/>
                                     </td>
                                     <td>
                                         <t t-if="module.newest">
-                                            <span t-attf-class="badge {{module.update ? 'text-bg-primary' : 'text-bg-light'}}" t-esc="module.newest"/>
-                                            <a t-if="module.notes" href="#" class="small ms-2" t-on-click.prevent="() => this.toggle('m' + module.id)">What's new</a>
+                                            <span t-attf-class="badge o_mgu_version {{module.update ? 'text-bg-primary' : 'text-bg-light'}}" t-esc="module.newest"
+                                                  title="Click to copy" t-on-click="() => this.copy(module.newest)"/>
+                                            <a t-if="module.notes" href="#" class="small ms-2" t-on-click.prevent="() => this.toggle('m' + module.id)">Full notes</a>
                                         </t>
                                         <span t-else="" class="text-muted small">Not on GitHub</span>
                                     </td>
@@ -167,7 +173,8 @@
                         <div class="small fw-bold mb-2">New on GitHub</div>
                         <div t-foreach="section.available" t-as="item" t-key="item.id" class="d-flex align-items-center gap-2 mb-2">
                             <div class="flex-grow-1 min-w-0">
-                                <span class="fw-bold" t-esc="item.title"/> <span class="badge text-bg-light" t-esc="item.version"/>
+                                <span class="fw-bold" t-esc="item.title"/> <span class="badge text-bg-light o_mgu_version" t-esc="item.version"
+                                      title="Click to copy" t-on-click="() => this.copy(item.version)"/>
                                 <div class="small text-muted text-truncate"><t t-esc="item.name"/><t t-if="item.summary"> · <t t-esc="item.summary"/></t></div>
                             </div>
                             <button class="btn btn-sm btn-outline-primary" t-att-disabled="state.busy" t-on-click="() => this.install(item)"><i class="fa fa-plus me-1"/>Install</button>
@@ -230,11 +237,22 @@
             <t t-if="props.plan.rows">
                 <table class="table table-sm align-middle">
                     <tbody>
-                        <tr t-foreach="props.plan.rows" t-as="row" t-key="row_index">
-                            <td t-esc="row.module"/>
-                            <td><span class="badge text-bg-light" t-esc="row.version"/></td>
-                            <td class="small text-muted" t-esc="row.why"/>
-                        </tr>
+                        <t t-foreach="props.plan.rows" t-as="row" t-key="row_index">
+                            <tr>
+                                <td t-esc="row.module"/>
+                                <td><span class="badge text-bg-light o_mgu_version" t-esc="row.version" title="Click to copy"
+                                          t-on-click="() => this.copy(row.version)"/></td>
+                                <td class="small text-muted" t-esc="row.why"/>
+                            </tr>
+                            <!-- what will be installed: its release notes, one line per change -->
+                            <tr t-if="row.lines and row.lines.length">
+                                <td colspan="3" class="border-top-0 pt-0">
+                                    <ul class="small mb-1 ps-3 o_mgu_lines">
+                                        <li t-foreach="row.lines" t-as="line" t-key="line_index" t-esc="line"/>
+                                    </ul>
+                                </td>
+                            </tr>
+                        </t>
                     </tbody>
                 </table>
                 <div t-if="props.plan.skipped and props.plan.skipped.length" class="small text-muted mb-2">

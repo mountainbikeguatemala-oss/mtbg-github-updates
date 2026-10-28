@@ -261,6 +261,16 @@ def commit_subject(source_code, url, commit):
         return ""
 
 
+def commit_message(source_code, url, commit):
+    """The full message of ``commit`` (its subject and body): a release's notes when its tag says no more than its name."""
+    if not re.match(r"^[0-9a-f]{7,64}$", commit or ""):
+        return ""
+    try:
+        return run_git(source_code, url, "log", "-1", "--format=%B", commit, git_dir=mirror_path(source_code)).strip()
+    except StoreError:
+        return ""
+
+
 def still_released(source_code, url, subdir, module, commit, cache=None):
     """Whether ``module`` (released at ``commit``) still exists in the source: in the tree of the newest branch head
     that contains that commit. A retired module (its folder removed, its old tags kept) is gone there. A commit on
