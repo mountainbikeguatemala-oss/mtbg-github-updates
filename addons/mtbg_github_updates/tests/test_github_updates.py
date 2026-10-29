@@ -598,3 +598,27 @@ class TestGithubUpdates(TransactionCase):
         names = [row["name"] for row in self.env["mtbg.github.source"]._mtbg_available(self.src_tours)]
         self.assertIn("mgu_demo_glue_web", names)
         self.assertNotIn("mgu_demo_glue", names, "its modules are not installed: it comes with them")
+
+    def test_notes_open_for_the_last_update_only(self):
+        """Owner, 2026-10-28: on the page an extension's notes are open by default only if it was in the last update."""
+        module = self.env.ref("base.module_mtbg_github_updates")
+        self.env["mtbg.github.release"].create({"source_id": self.src_tours.id, "module": module.name,
+                                                "version": "19.0.9.0.1", "tag": module.name + "-19.0.9.0.1"})
+        Batch = self.env["mtbg.github.batch"]
+
+        def flag():
+            rows = [m for s in self.env["mtbg.github.source"].mtbg_updates_page()["sections"] for m in s["modules"]
+                    if m["name"] == module.name]
+            self.assertTrue(rows, "the module is listed under its source")
+            return rows[0]["in_last_batch"]
+
+        older = Batch.create({"name": "nb1", "kind": "update", "title": "Older"})
+        self.Update.create({"batch": "nb1", "batch_id": older.id, "module": module.name, "kind": "update",
+                            "from_version": "19.0.0.1.0", "to_version": "19.0.0.1.1", "state": "applied"})
+        self.assertTrue(flag())
+        newer = Batch.create({"name": "nb2", "kind": "update", "title": "Newer"})
+        self.Update.create({"batch": "nb2", "batch_id": newer.id, "module": "mgu_demo_a", "kind": "update",
+                            "from_version": "19.0.0.1.0", "to_version": "19.0.0.2.0", "state": "applied"})
+        self.assertFalse(flag(), "not in the last update: folded")
+        newer.undone = True
+        self.assertTrue(flag(), "an update rolled back does not count")

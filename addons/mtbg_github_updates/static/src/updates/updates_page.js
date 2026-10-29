@@ -92,7 +92,10 @@ export class MtbgGithubUpdatesPage extends Component {
         } catch {
             // private windows
         }
-        this.state = useState({ data: null, busy: false, tab, open: {}, key: null, history: null });
+        // notes: an extension's notes folded / unfolded by hand; allNotes: the "all notes" toggle (null: the default,
+        // open for the extensions of the last update only: owner, 2026-10-28)
+        this.state = useState({ data: null, busy: false, tab, open: {}, key: null, history: null, notes: {},
+                                allNotes: null });
         this.when = when;
         onWillStart(() => this.load());
     }
@@ -128,6 +131,29 @@ export class MtbgGithubUpdatesPage extends Component {
 
     toggle(key) {
         this.state.open[key] = !this.state.open[key];
+    }
+
+    /** An extension's release notes: unfolded by hand, else as the "all notes" toggle, else only if it was in the
+     * last update. */
+    notesShown(module) {
+        if (module.id in this.state.notes) {
+            return this.state.notes[module.id];
+        }
+        return this.state.allNotes ?? !!module.in_last_batch;
+    }
+
+    toggleNotes(module) {
+        this.state.notes[module.id] = !this.notesShown(module);
+    }
+
+    get anyNotesShown() {
+        return (this.state.data?.sections || []).some((s) => s.modules.some((m) => m.lines?.length && this.notesShown(m)));
+    }
+
+    /** All notes on, or all off (each extension's own toggle starts again from there). */
+    toggleAllNotes() {
+        this.state.allNotes = !this.anyNotesShown;
+        this.state.notes = {};
     }
 
     get updateCount() {

@@ -47,6 +47,10 @@ class MtbgGithubSource(models.Model):
             if module.mgu_source_id:
                 by_source.setdefault(module.mgu_source_id.id, Module)
                 by_source[module.mgu_source_id.id] |= module
+        # the extensions of the last update: their notes open by default (owner, 2026-10-28)
+        last = self.env["mtbg.github.batch"].search([("kind", "in", ("update", "install", "package")),
+                                                     ("undone", "=", False)], limit=1)
+        recent = set(last.line_ids.mapped("module"))
         sections = []
         for source in sources:
             modules = by_source.get(source.id, Module).sorted("name").filtered(lambda m: matches(m.name, patterns))
@@ -61,7 +65,7 @@ class MtbgGithubSource(models.Model):
                 "https": (source.url or "").startswith("https://"),
                 "last_check": fields.Datetime.to_string(source.last_check) if source.last_check else False,
                 "last_error": source.last_error or "", "releases": source.release_count,
-                "modules": [self._mtbg_module_row(m) for m in modules],
+                "modules": [dict(self._mtbg_module_row(m), in_last_batch=m.name in recent) for m in modules],
                 "packages": [self._mtbg_package_row(p) for p in packages],
                 "available": available,
             })

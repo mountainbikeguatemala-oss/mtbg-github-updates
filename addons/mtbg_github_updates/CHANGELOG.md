@@ -2,6 +2,11 @@
 
 Every version of this module, newest first. Tags: `git tag -l 'mtbg_github_updates-*'`.
 
+## 19.0.0.1.8 · 2026-10-28
+
+- Release notes folded by default (owner, 2026-10-28): an extension's notes open only if it was in the last update;
+  each extension folds / unfolds its own (the arrow by its name); "Show all notes" / "Hide all notes" for all.
+
 ## 19.0.0.1.7 · 2026-10-28
 
 - **Release notes, one line per change** (owner, 2026-10-28): the update's confirmation lists, under each extension

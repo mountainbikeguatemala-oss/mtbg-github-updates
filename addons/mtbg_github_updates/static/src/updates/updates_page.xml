@@ -127,16 +127,30 @@
 
                     <!-- modules, each with its own newest version -->
                     <table t-else="" class="table mb-0 align-middle">
-                        <thead><tr><th>Extension</th><th>Running</th><th>On GitHub</th><th/></tr></thead>
+                        <thead><tr>
+                            <th>Extension
+                                <!-- every extension's notes on or off (owner, 2026-10-28) -->
+                                <button t-if="section.modules.some((m) => m.lines and m.lines.length)" type="button"
+                                        class="btn btn-sm btn-link py-0 ms-2 o_mgu_all_notes" t-on-click="toggleAllNotes">
+                                    <i t-attf-class="fa {{anyNotesShown ? 'fa-compress' : 'fa-expand'}} me-1"/>
+                                    <t t-if="anyNotesShown">Hide all notes</t><t t-else="">Show all notes</t></button>
+                            </th><th>Running</th><th>On GitHub</th><th/></tr></thead>
                         <tbody>
                             <tr t-if="!section.modules.length"><td colspan="4" class="small text-muted">None of its extensions is installed here.</td></tr>
                             <t t-foreach="section.modules" t-as="module" t-key="module.id">
                                 <tr>
                                     <td>
-                                        <div class="fw-bold" t-esc="module.title"/>
+                                        <div class="fw-bold">
+                                            <!-- its notes folded / unfolded -->
+                                            <button t-if="module.lines and module.lines.length" type="button"
+                                                    class="btn btn-sm btn-link p-0 me-1 o_mgu_fold" t-on-click="() => this.toggleNotes(module)"
+                                                    t-att-title="notesShown(module) ? 'Fold the notes' : 'Unfold the notes'">
+                                                <i t-attf-class="fa {{notesShown(module) ? 'fa-caret-down' : 'fa-caret-right'}}"/></button>
+                                            <t t-esc="module.title"/>
+                                        </div>
                                         <div class="small text-muted" t-esc="module.name"/>
                                         <!-- its most recent release notes, one line per change (owner, 2026-10-28) -->
-                                        <ul t-if="module.lines and module.lines.length" class="small mb-0 mt-1 ps-3 o_mgu_lines">
+                                        <ul t-if="module.lines and module.lines.length and notesShown(module)" class="small mb-0 mt-1 ps-3 o_mgu_lines">
                                             <li t-foreach="module.lines" t-as="line" t-key="line_index" t-esc="line"/>
                                         </ul>
                                     </td>
