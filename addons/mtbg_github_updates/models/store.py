@@ -45,6 +45,9 @@ BUSY_CRON = "This cron task is currently being executed"
 BUSY_TRIES = 5
 BUSY_WAIT = 20
 # an upgrade that waited too long for a lock (a live session held it): ended sessions, a longer lock wait, again
+KEEP_BACKUPS = 3  # pre-update backups kept per database (owner, 2026-11-01: www's filled the disk)
+BACKUP_MARGIN = 1.1  # the dump's room: the database's size and a tenth (a custom-format dump is compressed)
+BACKUP_NAME_RE = re.compile(r"^(?P<key>.+-\d{8}-\d{6}-[a-z0-9-]{1,40})\.(?:dump|files)$")
 LOCK_ERRORS = ("lock timeout", "LockNotAvailable", "55P03", "could not obtain lock")
 LOCK_TIMEOUTS = ("30s", "60s", "120s")
 RELEASE_MARK = ".mtbg_release"  # in a version folder: the commit of the release tag it was extracted from
@@ -597,6 +600,7 @@ def backup_database(dbname, label):
     folder = path("backups", dbname)
     os.makedirs(folder, exist_ok=True)
     os.chmod(folder, 0o700)
+    check_backup_space(dbname)  # before pg_dump: never a disk filled midway
     stamp = time.strftime("%Y%m%d-%H%M%S")
     target = os.path.join(folder, "%s-%s-%s.dump" % (dbname, stamp, label))
     _pg("pg_dump", "--format=custom", "--no-owner", "--file", target, dbname)
@@ -611,7 +615,54 @@ def backup_database(dbname, label):
             _logger.warning("Updates: no filestore snapshot of %s (%s)", dbname, (result.stderr or "").strip()[-300:])
             shutil.rmtree(snapshot, ignore_errors=True)
             snapshot = ""
+    prune_backups(dbname)
     return target, snapshot
+
+
+def database_size(dbname):
+    """The database's size on disk (bytes)."""
+    from contextlib import closing
+    from odoo import sql_db
+    with closing(sql_db.db_connect(check_db(dbname)).cursor()) as cr:
+        cr.execute("SELECT pg_database_size(current_database())")
+        return cr.fetchone()[0]
+
+
+def backup_space(dbname):
+    """(free bytes, bytes a backup needs) in the backups folder. The dump: the database's size and a margin; the
+    filestore's snapshot is hard links on the same disk (no room), else it is not taken."""
+    return free_bytes(path("backups")), int(database_size(dbname) * BACKUP_MARGIN)
+
+
+def check_backup_space(dbname):
+    free, needed = backup_space(dbname)
+    if free is not None and free < needed:
+        raise StoreError("Not enough disk space for a backup: %.1f GB free, %.1f GB needed."
+                         % (free / 1024 ** 3, needed / 1024 ** 3))
+
+
+def prune_backups(dbname, keep=KEEP_BACKUPS):
+    """Only the last ``keep`` backups of ``dbname`` stay (a dump and its filestore snapshot are one); the older ones
+    are deleted, and each one removed is logged. Returns the paths removed."""
+    folder = path("backups", check_db(dbname))
+    if not os.path.isdir(folder):
+        return []
+    groups = {}
+    for name in os.listdir(folder):
+        match = BACKUP_NAME_RE.match(name)
+        if match and match.group("key").startswith(dbname + "-"):
+            groups.setdefault(match.group("key"), []).append(os.path.join(folder, name))
+    stamp = lambda key: key[len(dbname) + 1:len(dbname) + 16]  # noqa: E731 - YYYYMMDD-HHMMSS sorts by time
+    removed = []
+    for key in sorted(groups, key=stamp, reverse=True)[keep:]:
+        for target in sorted(groups[key]):
+            if os.path.isdir(target) and not os.path.islink(target):
+                shutil.rmtree(target, ignore_errors=True)
+            elif os.path.isfile(target) or os.path.islink(target):
+                os.remove(target)
+            removed.append(target)
+            _logger.info("Updates: old backup removed (only the last %s are kept): %s", keep, target)
+    return removed
 
 
 def free_bytes(folder=None):

@@ -1,6 +1,6 @@
 {
     "name": "Updates from GitHub",
-    "version": "19.0.0.1.8",
+    "version": "19.0.0.1.9",
     "category": "Administration",
     "summary": "One Updates page for every product's extensions: from their GitHub releases, one module or a whole "
                "package, with backup, automatic and manual rollback",
@@ -14,9 +14,10 @@ Updates page (Settings > Updates), working on a site that has only one of them.
 * Releases: a module's tag ``<module>-<version>``. Packages: several modules released together, a
   ``release-<repo>-<YYYYMMDD>-<n>`` tag on the batch commit (or a commit with several module tags): one "Install
   this release" for all of them.
-* Each update: a database backup and a filestore snapshot; the version from its release tag (checked) into the
-  store; the database upgraded in a process of its own; the site restarted. New dependencies come along, from any
-  source; minimum versions are honoured. A failed upgrade switches back by itself.
+* Each update: a database backup and a filestore snapshot (the last 3 kept; refused without room); the version
+  from its release tag (checked) into the store; the database upgraded in a process of its own; the site
+  restarted. New dependencies come along, from any source; minimum versions are honoured. A failed upgrade switches
+  back by itself.
 * Roll back an update: the code, the database and the files as they were before it (the data entered since is
   lost: the page says how much first). Go back (code only) for one module, when it is safe.
 * Takes over the Tours and CFD updaters' stores without reinstalling anything.

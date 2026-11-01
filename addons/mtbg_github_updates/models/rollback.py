@@ -30,8 +30,6 @@ from . import maintenance, reexec, store
 from .update import manifest_requires
 
 _logger = logging.getLogger(__name__)
-KEEP_BATCHES = 10
-KEEP_DAYS = 30
 KEEP_ROLLED_DB_DAYS = 7
 # tables whose new rows are not "data entered" (logs, caches, sessions, the updater's own)
 QUIET_PREFIXES = ("ir_", "bus_", "base_", "res_users_log", "res_users_settings", "mail_tracking", "mtbg_github_",
@@ -303,33 +301,19 @@ class MtbgGithubBatch(models.Model):
 
     # ------------------------------------------------------------------ retention
     @api.model
+    def _mtbg_mark_purged(self):
+        """The batches whose backup is gone (only the last ones are kept): no rollback offered to them."""
+        self.sudo().search([("backup_path", "!=", False), ("backup_purged", "=", False)]).filtered(
+            lambda b: not os.path.isfile(b.backup_path)).write({"backup_purged": True})
+
+    @api.model
     def _cron_retention(self):
-        """Backups: the last KEEP_BATCHES batches or KEEP_DAYS days, whichever keeps more, and the newest one before
-        each module's last update; a database kept by a rollback: KEEP_ROLLED_DB_DAYS days. Not in another
-        database's store."""
+        """Backups: only the last store.KEEP_BACKUPS of this database (owner, 2026-11-01; also after each backup);
+        a database kept by a rollback: KEEP_ROLLED_DB_DAYS days. Not in another database's store."""
         if self.env["mtbg.github.update"]._mtbg_owner_problem():
             return
-        batches = self.sudo().search([("backup_path", "!=", False), ("backup_purged", "=", False)], order="id desc")
-        keep = batches[:KEEP_BATCHES]
-        limit = fields.Datetime.now() - timedelta(days=KEEP_DAYS)
-        keep |= batches.filtered(lambda b: b.create_date and b.create_date >= limit)
-        newest_per_module = {}
-        for batch in batches:
-            for module in batch.line_ids.mapped("module"):
-                newest_per_module.setdefault(module, batch)
-        keep |= self.browse([b.id for b in newest_per_module.values()])
-        for batch in batches - keep:
-            for target in (batch.backup_path, batch.snapshot_path):
-                if not target:
-                    continue
-                real = os.path.realpath(target)
-                if not real.startswith(os.path.realpath(store.path("backups")) + os.sep):
-                    continue
-                if os.path.isdir(real):
-                    shutil.rmtree(real, ignore_errors=True)
-                elif os.path.isfile(real):
-                    os.remove(real)
-            batch.backup_purged = True
+        store.prune_backups(self.env.cr.dbname)
+        self._mtbg_mark_purged()
         old = fields.Datetime.now() - timedelta(days=KEEP_ROLLED_DB_DAYS)
         for restore in self.sudo().search([("kind", "=", "restore"), ("kept_database", "!=", False),
                                            ("create_date", "<", old)]):
@@ -403,6 +387,7 @@ class MtbgGithubUpdate(models.Model):
         header = self.env["mtbg.github.batch"].create({"name": name, "kind": "revert", "backup_path": backup,
                                                         "snapshot_path": snapshot, "backup_at": fields.Datetime.now(),
                                                         "title": _("Back to %s", version)})
+        self.env["mtbg.github.batch"]._mtbg_mark_purged()  # the older backups the new one replaced
         before = store.active_target(module)
         store.switch(module, folder)
         log = self.create({"batch": name, "batch_id": header.id, "module": module, "kind": "revert",

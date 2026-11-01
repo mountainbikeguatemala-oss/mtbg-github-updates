@@ -2,6 +2,15 @@
 
 Every version of this module, newest first. Tags: `git tag -l 'mtbg_github_updates-*'`.
 
+## 19.0.0.1.9 · 2026-11-01
+
+- **Only the last 3 backups are kept** (owner, 2026-11-01: www's pre-update backups reached 8.9 GB and filled the
+  disk): after each backup the older ones (a dump and its filestore snapshot together) are deleted, each one logged;
+  the daily clean-up keeps the same 3. An update whose backup is gone offers no rollback.
+- **Room checked before the backup**: the database's size and a tenth must be free in the backups folder, else the
+  update is refused before pg_dump: "Not enough disk space for a backup: X GB free, Y GB needed." (the filestore
+  snapshot is hard links: no room).
+
 ## 19.0.0.1.8 · 2026-10-28
 
 - Release notes folded by default (owner, 2026-10-28): an extension's notes open only if it was in the last update;

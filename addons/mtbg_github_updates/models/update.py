@@ -2,7 +2,7 @@
 
 A batch is a set of extensions, each going to a chosen version (one module, several, a package):
 
-1. a database backup and a filestore snapshot (kept for the rollback);
+1. a database backup and a filestore snapshot (kept for the rollback: the last 3; refused without room);
 2. each version is put in the store (once, from its release tag) and its active link is switched to it;
 3. a process of its own upgrades the database with the new code (``-u ... --stop-after-init``) while the server
    still runs the old code (a release that adds a column every request reads would otherwise break every request of
@@ -216,6 +216,7 @@ class MtbgGithubUpdate(models.Model):
             "name": name, "kind": kind, "package_id": package.id if package else False,
             "title": title or (package.name if package else ""), "backup_path": backup, "snapshot_path": snapshot,
             "backup_at": fields.Datetime.now()})
+        header._mtbg_mark_purged()  # the older backups the new one replaced (only the last ones are kept)
         installed = set(self.env["ir.module.module"].sudo().search(
             [("name", "in", [m for m, _r, _b in required]), ("state", "in", ("installed", "to upgrade"))]).mapped("name"))
         on_site = self._mtbg_installed()

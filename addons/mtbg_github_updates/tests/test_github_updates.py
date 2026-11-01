@@ -317,7 +317,8 @@ class TestGithubUpdates(TransactionCase):
                 handle.write("one")
             def dump(tool, *args, **kw):
                 open(args[args.index("--file") + 1], "w").close()  # pg_dump's file
-            with patch.object(store, "_pg", side_effect=dump):
+            with patch.object(store, "_pg", side_effect=dump), \
+                    patch.object(store, "backup_space", return_value=(10 ** 12, 1)):  # no such database
                 _dump, snapshot = store.backup_database("mgu_fs", "x")
             self.assertTrue(os.path.isfile(os.path.join(snapshot, "ab", "f1")))
             with open(os.path.join(files, "ab", "f2"), "w") as handle:
@@ -327,25 +328,55 @@ class TestGithubUpdates(TransactionCase):
             self.assertTrue(os.path.isfile(os.path.join(store.filestore_dir("mgu_fs_kept"), "ab", "f2")))
 
     def test_retention(self):
+        """Owner, 2026-11-01 (www's backups filled the disk): only the last 3 backups stay, a dump and its filestore
+        snapshot together; the batches of the removed ones offer no rollback."""
         Batch = self.env["mtbg.github.batch"]
-        folder = store.path("backups", "ret")
+        db = "mgu_ret"
+        folder = store.path("backups", db)
         os.makedirs(folder, exist_ok=True)
         batches = Batch
-        for i in range(13):
-            dump = os.path.join(folder, "%02d.dump" % i)
-            open(dump, "w").close()
-            batches |= Batch.create({"name": "ret%02d" % i, "kind": "update", "backup_path": dump})
-        self.env.cr.execute("UPDATE mtbg_github_batch SET create_date = now() - interval '40 days' WHERE id IN %s",
-                            (tuple(batches.ids),))
-        batches.invalidate_recordset()
-        self.Update.create({"batch": "ret00", "batch_id": batches[0].id, "module": "mgu_only_once", "kind": "update",
-                            "state": "applied"})
-        Batch._cron_retention()
-        purged = batches.filtered("backup_purged")
-        self.assertEqual(len(purged), 2, "13 batches: the newest 10 and the last one of each module stay")
-        self.assertFalse(batches[0].backup_purged, "the newest backup before mgu_only_once's update")
-        for batch in purged:
-            self.assertFalse(os.path.exists(batch.backup_path))
+        for day in range(1, 6):
+            key = os.path.join(folder, "%s-202610%02d-120000-b%d" % (db, day, day))
+            open(key + ".dump", "w").close()
+            os.makedirs(key + ".files")
+            batches |= Batch.create({"name": "ret%d" % day, "kind": "update", "backup_path": key + ".dump",
+                                     "snapshot_path": key + ".files"})
+        open(os.path.join(folder, "notes.txt"), "w").close()
+        with self.assertLogs("odoo.addons.mtbg_github_updates.models.store", level="INFO") as logs:
+            removed = store.prune_backups(db)
+        self.assertEqual(len(removed), 4, "the two oldest: their dump and their snapshot")
+        self.assertEqual(sum("old backup removed" in line for line in logs.output), 4, "each one logged")
+        self.assertEqual(sorted(os.listdir(folder)), sorted(
+            ["notes.txt"] + ["%s-202610%02d-120000-b%d.%s" % (db, d, d, ext) for d in (3, 4, 5) for ext in ("dump", "files")]))
+        Batch._mtbg_mark_purged()
+        self.assertEqual(batches.filtered("backup_purged").mapped("name"), ["ret1", "ret2"])
+
+    def test_backup_keeps_the_last_three(self):
+        """A new backup removes the ones before the last three (a temp folder: pg_dump only writes its file)."""
+        data = os.path.join(self.tmp, "data_keep")
+        def dump(tool, *args, **kw):
+            open(args[args.index("--file") + 1], "w").close()
+        with patch.dict(config.options, {"data_dir": data}), patch.object(store, "_pg", side_effect=dump), \
+                patch.object(store, "backup_space", return_value=(10 ** 12, 1)):
+            folder = store.path("backups", "mgu_keep")
+            os.makedirs(folder, exist_ok=True)
+            for day in range(1, 5):
+                open(os.path.join(folder, "mgu_keep-202610%02d-120000-old%d.dump" % (day, day)), "w").close()
+            target, _snapshot = store.backup_database("mgu_keep", "new")
+        self.assertEqual(len(os.listdir(folder)), 3)
+        self.assertIn(os.path.basename(target), os.listdir(folder), "the new one stays")
+        self.assertIn("mgu_keep-20261004-120000-old4.dump", os.listdir(folder))
+
+    def test_backup_refused_without_room(self):
+        """Not enough disk for the dump: refused before pg_dump, with what is free and what it needs."""
+        with patch.object(store, "free_bytes", return_value=2 * 1024 ** 3), \
+                patch.object(store, "database_size", return_value=5 * 1024 ** 3), \
+                patch.object(store, "_pg") as pg:
+            with self.assertRaisesRegex(store.StoreError,
+                                        r"Not enough disk space for a backup: 2\.0 GB free, 5\.5 GB needed\."):
+                store.backup_database("mgu_room", "x")
+            pg.assert_not_called()
+        self.assertGreater(store.database_size(self.env.cr.dbname), 0, "the database's real size")
 
     # ------------------------------------------------------------------ taking over
     def test_take_over_an_earlier_store(self):
