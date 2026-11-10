@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- every 30 minutes it checks whether the day's snapshot is due (the hour in Settings), goes on with a run
+             that ran out of time, and starts Back up now -->
+        <record id="ir_cron_offsite_backup" model="ir.cron">
+            <field name="name">Updates: off-site backup (Cloudflare R2)</field>
+            <field name="model_id" ref="model_mtbg_offsite_backup"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_offsite()</field>
+            <field name="interval_number">30</field>
+            <field name="interval_type">minutes</field>
+            <field name="active" eval="True"/>
+        </record>
+    </data>
+</odoo>

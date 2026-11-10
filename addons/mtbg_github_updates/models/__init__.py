@@ -9,3 +9,5 @@ from . import rollback
 from . import adopt
 from . import ir_module
 from . import page
+from . import offsite
+from . import res_config_settings

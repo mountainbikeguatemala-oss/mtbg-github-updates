@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="mtbg_offsite_backup_list" model="ir.ui.view">
+        <field name="name">mtbg.offsite.backup.list</field>
+        <field name="model">mtbg.offsite.backup</field>
+        <field name="arch" type="xml">
+            <list create="0" edit="0" delete="0" decoration-danger="state == 'failed'" decoration-muted="state == 'running'">
+                <field name="taken_at" string="Taken"/>
+                <field name="tier"/>
+                <field name="db_size_label" string="Database"/>
+                <field name="files_size_label" string="Files"/>
+                <field name="total_size_label" string="Total"/>
+                <field name="state" widget="badge" decoration-success="state == 'verified'" decoration-danger="state == 'failed'" decoration-info="state == 'running'"/>
+                <field name="message" optional="show"/>
+                <button name="action_download_database" type="object" string="Database" icon="fa-download" invisible="state != 'verified'"/>
+                <button name="action_download_files_list" type="object" string="File list" icon="fa-list" invisible="state != 'verified'"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="mtbg_offsite_panel_form" model="ir.ui.view">
+        <field name="name">mtbg.offsite.panel.form</field>
+        <field name="model">mtbg.offsite.panel</field>
+        <field name="arch" type="xml">
+            <form string="Off-site backups" create="0" delete="0">
+                <header>
+                    <button name="action_backup_now" type="object" string="Back up now" class="btn-primary" icon="fa-cloud-upload"/>
+                    <button name="action_refresh" type="object" string="Refresh" icon="fa-refresh"/>
+                </header>
+                <sheet>
+                    <div class="oe_title"><h1>Off-site backups</h1></div>
+                    <group>
+                        <group string="Storage">
+                            <field name="used_label" readonly="1"/>
+                            <field name="monthly_label" readonly="1"/>
+                            <field name="snapshot_count" readonly="1"/>
+                            <field name="bucket" readonly="1"/>
+                        </group>
+                        <group string="Schedule">
+                            <field name="offsite_enabled"/>
+                            <field name="offsite_hour" widget="float_time" invisible="not offsite_enabled"/>
+                            <field name="schedule_note" readonly="1" nolabel="1" colspan="2" class="text-muted"/>
+                        </group>
+                    </group>
+                    <field name="backup_ids" readonly="1" nolabel="1" context="{'list_view_ref': 'mtbg_github_updates.mtbg_offsite_backup_list'}"/>
+                    <p class="text-muted small mt-2">
+                        Download links are private and work for one hour. The files are stored once and shared by every
+                        snapshot: a restore takes the database and the snapshot's file list.
+                    </p>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_mtbg_offsite_panel" model="ir.actions.server">
+        <field name="name">Off-site backups</field>
+        <field name="model_id" ref="model_mtbg_offsite_panel"/>
+        <field name="state">code</field>
+        <field name="code">action = model.action_open()</field>
+    </record>
+
+    <menuitem id="menu_mtbg_offsite_backups" name="Off-site backups" parent="base.menu_administration" sequence="61"
+              action="action_mtbg_offsite_panel" groups="base.group_system"/>
+
+    <record id="res_config_settings_view_form_offsite" model="ir.ui.view">
+        <field name="name">res.config.settings.form.offsite.backups</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="base.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form" position="inside">
+                <app data-string="Backups" string="Backups" name="mtbg_github_updates" groups="base.group_system">
+                    <block title="Off-site backups (Cloudflare R2)" name="mtbg_offsite_backups">
+                        <setting string="Off-site backups" help="A snapshot of the database and its files in this site's R2 bucket every day, kept on a fading schedule (yearly ones forever).">
+                            <field name="mtbg_offsite_enabled"/>
+                            <div class="content-group">
+                                <div class="row mt8" invisible="not mtbg_offsite_enabled">
+                                    <label for="mtbg_offsite_hour" class="col-lg-4 o_light_label"/>
+                                    <field name="mtbg_offsite_hour" widget="float_time" class="col-lg-8"/>
+                                </div>
+                                <div class="mt8"><field name="mtbg_offsite_summary" readonly="1"/></div>
+                                <div class="mt8">
+                                    <button name="%(mtbg_github_updates.action_mtbg_offsite_panel)d" type="action" string="Open backups" icon="fa-list" class="btn btn-secondary btn-sm"/>
+                                </div>
+                            </div>
+                        </setting>
+                    </block>
+                </app>
+            </xpath>
+        </field>
+    </record>
+</odoo>

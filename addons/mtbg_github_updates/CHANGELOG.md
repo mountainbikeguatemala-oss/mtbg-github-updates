@@ -2,6 +2,24 @@
 
 Every version of this module, newest first. Tags: `git tag -l 'mtbg_github_updates-*'`.
 
+## 19.0.0.2.0 · 2026-11-10
+- Off-site backups in Cloudflare R2 (owner, 2026-11-10: R2 replaces the Vultr snapshots; "we should backup every
+  day - then reduce to one every 7 days then one every 30 days then one every 60 days, 180 days, 360 days fading
+  over time"; yearly ones kept forever; "in the settings section we should see the different backups that have
+  been made with links and sizes and timestamps"; "table should include current charges for storage as well and
+  storage total used").
+  - A daily snapshot (Settings › Backups: on/off and the hour, site time): a pg_dump plus the file list, with
+    every uploaded file stored once under files/<db>/ and shared by every snapshot. A first upload of several GB
+    goes on in the next job runs (7 minutes each) without sending a file twice. Verified: the dump's size in R2,
+    the list, and every listed file present.
+  - Fading: daily for 7 days, one per 7 days to 30, per 30 to 60, per 60 to 180, per 180 to 360, then one per
+    360 days kept forever (the oldest of each period stays). Dropped snapshots, and files no kept snapshot lists,
+    are deleted once older than the 7-day bucket lock.
+  - Settings › Off-site backups: storage used (the whole bucket), current charges (R2 Standard $0.015/GB-month
+    after the account's free 10 GB), snapshots kept, the bucket, Back up now, and every snapshot with its time,
+    kind, database / files / total sizes, status and private 1-hour download links (database, file list).
+  - R2 through Cloudflare Connector (a soft check, no dependency); without it the page says to install it.
+
 ## 19.0.0.1.9 · 2026-11-01
 
 - **Only the last 3 backups are kept** (owner, 2026-11-01: www's pre-update backups reached 8.9 GB and filled the
