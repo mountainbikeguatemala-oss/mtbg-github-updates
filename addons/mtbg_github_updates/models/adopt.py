@@ -7,6 +7,10 @@ same server, the same repositories: no new key to add in GitHub), and their hist
 restarts and loads every module from this store (its active folder first in addons_path). Their stores are left as
 they were: taking this store's line out of addons_path and restarting goes back to them (the migration's rollback),
 until they are archived.
+
+Only an earlier updater THIS database used is offered: its source model is loaded here, or its history table exists
+here with rows. Two sites sharing a data_dir (one server, owner 2026-11-11: the shop saw the tours site's old stores
+under the default folder names) would otherwise be offered each other's versions.
 """
 import logging
 import os
@@ -30,6 +34,18 @@ OLD = (
 
 def old_root(conf_key, folder):
     return config.get(conf_key) or os.path.join(config["data_dir"], folder)
+
+
+def used_here(env, source_model, table):
+    """Whether this database used that earlier updater: its source model is loaded, or its history has rows."""
+    if source_model in env:
+        return True
+    cr = env.cr
+    cr.execute("SELECT to_regclass(%s)", (table,))
+    if not cr.fetchone()[0]:
+        return False
+    cr.execute("SELECT EXISTS (SELECT 1 FROM %s)" % table)  # noqa: S608 - a fixed name from OLD
+    return bool(cr.fetchone()[0])
 
 
 def loaded_folder(module):
@@ -66,6 +82,8 @@ class MtbgGithubBatch(models.Model):
         mine = set(store.active_modules())
         updaters = []
         for key, label, conf_key, folder, source_model, table in OLD:
+            if not used_here(self.env, source_model, table):
+                continue  # another site's (a shared data_dir), or never used here
             root = old_root(conf_key, folder)
             links = old_links(root)
             active = os.path.realpath(os.path.join(root, "store", "active"))
@@ -100,7 +118,9 @@ class MtbgGithubBatch(models.Model):
         header = self.create({"name": name, "kind": "adopt", "title": _("Taken over from the earlier updaters")})
         lines = Update.browse()
         skip = {m["module"] for u in preview["updaters"] for m in u["modules"] if m["problem"]}
-        for key, label, conf_key, folder, _model, _table in OLD:
+        for key, label, conf_key, folder, source_model, table in OLD:
+            if not used_here(self.env, source_model, table):
+                continue  # another site's store: never taken (see mtbg_adopt_preview)
             for module, target in sorted(old_links(old_root(conf_key, folder)).items()):
                 version = os.path.basename(os.path.dirname(target))
                 if store.active_target(module) or module in skip:

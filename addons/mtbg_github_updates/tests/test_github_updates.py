@@ -392,6 +392,7 @@ class TestGithubUpdates(TransactionCase):
         with patch.dict(config.options, {"mtbg_updates_dir": old, "cfd_updates_dir": empty}), \
                 patch.object(store, "in_addons_path", return_value=True), \
                 patch.object(store, "shadowed_by", return_value=None), \
+                patch.object(adopt, "used_here", return_value=True), \
                 patch.object(type(self.Update), "_mtbg_trigger_and_restart"):
             preview = Batch.mtbg_adopt_preview()
             self.assertEqual(preview["todo"], 1)
@@ -413,6 +414,41 @@ class TestGithubUpdates(TransactionCase):
             self.assertEqual(store.active_version("mgu_demo_a"), "19.0.0.3.0", "not taken back to the old store's")
         self.assertEqual(adopt.old_links(empty), {})
 
+    def test_take_over_only_an_updater_this_database_used(self):
+        """Two sites on one server share the data_dir: the other site's old store (under the default folder name) is
+        never offered here; this database's own is (owner, 2026-11-11: the shop was offered the tours site's)."""
+        old = os.path.join(self.tmp, "old_shared")
+        target = os.path.join(old, "store", "versions", "mgu_demo_a", "19.0.0.2.0", "mgu_demo_a")
+        os.makedirs(target)
+        with open(os.path.join(target, "__manifest__.py"), "w") as handle:
+            handle.write(MANIFEST % ("mgu_demo_a", "19.0.0.2.0", ["base"], ""))
+        os.makedirs(os.path.join(old, "store", "active"))
+        os.symlink(target, os.path.join(old, "store", "active", "mgu_demo_a"))
+        fake_old = (("tours", "Tours", "mtbg_updates_dir", "mtbg_updates", "mgu.no.such.model", "mgu_test_old_log"),)
+        Batch = self.env["mtbg.github.batch"].with_context(mtbg_no_restart=True)
+        with patch.dict(config.options, {"mtbg_updates_dir": old}), patch.object(adopt, "OLD", fake_old), \
+                patch.object(store, "in_addons_path", return_value=True), \
+                patch.object(store, "shadowed_by", return_value=None), \
+                patch.object(type(self.Update), "_mtbg_trigger_and_restart"):
+            # another site's store: no history here
+            preview = Batch.mtbg_adopt_preview()
+            self.assertEqual((preview["updaters"], preview["todo"]), ([], 0))
+            self.assertEqual(Batch.mtbg_adopt()["params"]["type"], "info", "nothing to take over")
+            self.assertIsNone(store.active_version("mgu_demo_a"))
+            self.assertEqual(self.env["mtbg.github.source"].mtbg_updates_page()["adopt"]["todo"], 0, "no banner")
+            # an empty history table: still not this database's
+            self.env.cr.execute("CREATE TABLE mgu_test_old_log (id serial PRIMARY KEY, batch varchar, module varchar, "
+                                "from_version varchar, to_version varchar, state varchar, message text, "
+                                "create_date timestamp)")
+            self.assertEqual(Batch.mtbg_adopt_preview()["todo"], 0)
+            # this database used it: offered, and taken over
+            self.env.cr.execute("INSERT INTO mgu_test_old_log (batch, module, from_version, to_version, state) "
+                                "VALUES ('b1', 'mgu_demo_a', '19.0.0.1.0', '19.0.0.2.0', 'applied')")
+            self.assertEqual(Batch.mtbg_adopt_preview()["todo"], 1)
+            Batch.mtbg_adopt()
+            self.assertEqual(store.active_version("mgu_demo_a"), "19.0.0.2.0")
+        self.assertTrue(adopt.used_here(self.env, "mtbg.github.source", "no_such_table"), "a loaded source model counts")
+
     def test_take_over_leaves_work_in_progress_alone(self):
         """A module loaded from another folder (a dev site's work in progress, after the old store in addons_path) is
         not copied: with this store first, the copy would hide it."""
@@ -430,6 +466,7 @@ class TestGithubUpdates(TransactionCase):
         with patch.dict(config.options, {"mtbg_updates_dir": old, "cfd_updates_dir": os.path.join(self.tmp, "none")}), \
                 patch.object(store, "in_addons_path", return_value=True), \
                 patch.object(store, "shadowed_by", return_value=None), \
+                patch.object(adopt, "used_here", return_value=True), \
                 patch.object(adopt, "loaded_folder", side_effect=lambda m: loaded.get(m, "")), \
                 patch.object(type(self.Update), "_mtbg_trigger_and_restart"):
             page = self.env["mtbg.github.source"].mtbg_updates_page()

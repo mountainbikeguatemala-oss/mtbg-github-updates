@@ -2,6 +2,9 @@
 
 Every version of this module, newest first. Tags: `git tag -l 'mtbg_github_updates-*'`.
 
+## 19.0.0.3.2 · 2026-11-11
+- **Take over offers only this database's earlier updaters** (owner, 2026-11-11: the shop's Updates page offered "Tours: 44 versions. Communication Flow Designer: 10 versions"): two sites on one server share the data_dir, and the old updaters' default folders (`<data_dir>/mtbg_updates`, `<data_dir>/cfd_updates`) were the other site's. An earlier updater is now offered and taken over only when this database used it: its source model is loaded here, or its history table exists here with rows. A site that took over already loses nothing, and its own earlier updater is still offered as before. Tests: another site's store gives no banner and nothing to take; an empty history table doesn't count; history rows do, and the take-over runs.
+
 ## 19.0.0.3.1 · 2026-11-11
 - No site or company names in the release (owner rule): author "MTBG Tours contributors". No behaviour change.
 
