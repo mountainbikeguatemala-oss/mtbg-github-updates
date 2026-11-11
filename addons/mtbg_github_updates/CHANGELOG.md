@@ -2,6 +2,9 @@
 
 Every version of this module, newest first. Tags: `git tag -l 'mtbg_github_updates-*'`.
 
+## 19.0.0.3.1 · 2026-11-11
+- No site or company names in the release (owner rule): author "MTBG Tours contributors". No behaviour change.
+
 ## 19.0.0.3.0 · 2026-11-10
 - Adjustable backup schedule (owner, 2026-11-10: "we should have adjustable schedule for backups with schedules for
   daily, weekly, monthly etc and expire after"; and how often they are taken).

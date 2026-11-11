@@ -1,6 +1,6 @@
 {
     "name": "Updates from GitHub",
-    "version": "19.0.0.3.0",
+    "version": "19.0.0.3.1",
     "category": "Administration",
     "summary": "One Updates page for every product's extensions: from their GitHub releases, one module or a whole "
                "package, with backup, automatic and manual rollback",
@@ -29,7 +29,7 @@ Updates page (Settings > Updates), working on a site that has only one of them.
 The site loads the chosen versions from ``<data_dir>/mtbg_github_updates/store/active``: that folder comes FIRST in
 the server's ``addons_path`` (the Updates page shows the exact line).
 """,
-    "author": "MTB Guatemala",
+    "author": "MTBG Tours contributors",
     "license": "LGPL-3",
     "depends": ["base", "web"],
     "mtbg_github_source": {"repo": "git@github.com:mountainbikeguatemala-oss/mtbg-github-updates.git",
