@@ -37,8 +37,18 @@
                             <field name="bucket" readonly="1"/>
                         </group>
                         <group string="Schedule">
-                            <field name="offsite_enabled"/>
-                            <field name="offsite_hour" widget="float_time" invisible="not offsite_enabled"/>
+                            <field name="offsite_enabled" string="Off-site backups on"/>
+                            <label for="offsite_every" invisible="not offsite_enabled"/>
+                            <div class="o_row" invisible="not offsite_enabled">
+                                <field name="offsite_every" class="oe_inline" style="max-width: 5em"/>
+                                <field name="offsite_unit" class="oe_inline"/>
+                            </div>
+                            <field name="offsite_hour" widget="float_time" invisible="not offsite_enabled or offsite_unit == 'hours'"/>
+                            <field name="rules_text" readonly="1"/>
+                            <field name="preview" readonly="1"/>
+                            <div colspan="2">
+                                <button name="action_edit_rules" type="object" string="Edit the fading rules" icon="fa-sliders" class="btn-link p-0"/>
+                            </div>
                             <field name="schedule_note" readonly="1" nolabel="1" colspan="2" class="text-muted"/>
                         </group>
                     </group>
@@ -49,6 +59,23 @@
                     </p>
                 </sheet>
             </form>
+        </field>
+    </record>
+
+    <record id="mtbg_offsite_rule_list" model="ir.ui.view">
+        <field name="name">mtbg.offsite.rule.list</field>
+        <field name="model">mtbg.offsite.rule</field>
+        <field name="arch" type="xml">
+            <list editable="bottom" string="Backup schedule">
+                <header>
+                    <button name="action_reset_defaults" type="object" string="Back to the default rules" display="always"
+                            confirm="Replace every rule with the defaults (daily 7 days, weekly 30, monthly 60, every 60 days 180, every 180 days 360, yearly forever)?"/>
+                </header>
+                <field name="name"/>
+                <field name="every_days"/>
+                <field name="expire_days"/>
+                <field name="summary" optional="show"/>
+            </list>
         </field>
     </record>
 

@@ -2,6 +2,19 @@
 
 Every version of this module, newest first. Tags: `git tag -l 'mtbg_github_updates-*'`.
 
+## 19.0.0.3.0 · 2026-11-10
+- Adjustable backup schedule (owner, 2026-11-10: "we should have adjustable schedule for backups with schedules for
+  daily, weekly, monthly etc and expire after"; and how often they are taken).
+  - Fading rules (mtbg.offsite.rule), edited on Off-site backups › Edit the fading rules: each rule keeps one
+    snapshot every N days (0 = every one) until it expires after M days (0 = never, the last rule only). A snapshot
+    follows the first rule it has not outlived. Defaults are today's schedule; "Back to the default rules" restores
+    them. Checks: no expiry under the 7-day bucket lock, the period shorter than the expiry, one forever rule at
+    most, no two rules with the same expiry, at least one rule.
+  - Take a snapshot every N hours / days / weeks; days and weeks from the set hour (site time).
+  - The page shows the rules in words and a preview: about how many snapshots stay, and their size at today's
+    sizes.
+  - A snapshot's Kind is its rule's name (migration: the 0.2.0 codes become the names).
+
 ## 19.0.0.2.0 · 2026-11-10
 - Off-site backups in Cloudflare R2 (owner, 2026-11-10: R2 replaces the Vultr snapshots; "we should backup every
   day - then reduce to one every 7 days then one every 30 days then one every 60 days, 180 days, 360 days fading

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- the default fading schedule (owner, 2026-11-10); noupdate: the site's own edits stay through upgrades -->
+    <data noupdate="1">
+        <record id="offsite_rule_daily" model="mtbg.offsite.rule">
+            <field name="name">Daily</field><field name="every_days">1</field><field name="expire_days">7</field>
+        </record>
+        <record id="offsite_rule_weekly" model="mtbg.offsite.rule">
+            <field name="name">Weekly</field><field name="every_days">7</field><field name="expire_days">30</field>
+        </record>
+        <record id="offsite_rule_monthly" model="mtbg.offsite.rule">
+            <field name="name">Monthly</field><field name="every_days">30</field><field name="expire_days">60</field>
+        </record>
+        <record id="offsite_rule_60" model="mtbg.offsite.rule">
+            <field name="name">Every 60 days</field><field name="every_days">60</field><field name="expire_days">180</field>
+        </record>
+        <record id="offsite_rule_180" model="mtbg.offsite.rule">
+            <field name="name">Every 180 days</field><field name="every_days">180</field><field name="expire_days">360</field>
+        </record>
+        <record id="offsite_rule_yearly" model="mtbg.offsite.rule">
+            <field name="name">Yearly (kept forever)</field><field name="every_days">360</field><field name="expire_days">0</field>
+        </record>
+    </data>
+</odoo>

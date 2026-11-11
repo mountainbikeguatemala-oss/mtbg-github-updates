@@ -125,16 +125,16 @@ class TestOffsiteBackups(TransactionCase):
         by_tier = {}
         for sid, tier in kept.items():
             by_tier.setdefault(tier, []).append(sid)
-        self.assertEqual(len(by_tier["daily"]), 7)
-        self.assertTrue(3 <= len(by_tier["weekly"]) <= 4)
-        self.assertTrue(1 <= len(by_tier["monthly"]) <= 2)
-        self.assertTrue(2 <= len(by_tier["bimonthly"]) <= 3)
-        self.assertTrue(1 <= len(by_tier["halfyear"]) <= 2)
-        self.assertTrue(1 <= len(by_tier["yearly"]) <= 3, "one a year after the first year")
+        self.assertEqual(len(by_tier["Daily"]), 7)
+        self.assertTrue(3 <= len(by_tier["Weekly"]) <= 4)
+        self.assertTrue(1 <= len(by_tier["Monthly"]) <= 2)
+        self.assertTrue(2 <= len(by_tier["Every 60 days"]) <= 3)
+        self.assertTrue(1 <= len(by_tier["Every 180 days"]) <= 2)
+        self.assertTrue(1 <= len(by_tier["Yearly (kept forever)"]) <= 3, "one a year after the first year")
         self.assertLess(len(kept), 25)
         # stable: what is kept today is still kept tomorrow unless a bigger period now covers it
         tomorrow = offsite.fade(snaps, now + datetime.timedelta(days=1))
-        self.assertIn(max(by_tier["yearly"]), tomorrow, "the oldest yearly stays (kept forever)")
+        self.assertIn(max(by_tier["Yearly (kept forever)"]), tomorrow, "the oldest yearly stays (kept forever)")
 
     def test_retention_removes_dropped_snapshots_and_unused_files(self):
         old = self._run()
@@ -197,3 +197,90 @@ class TestOffsiteWithoutConnector(TransactionCase):
             else:
                 with self.assertRaisesRegex(UserError, "Cloudflare Connector"):
                     self.env["mtbg.offsite.backup"]._mtbg_r2()
+
+
+@tagged("post_install", "-at_install")
+class TestOffsiteSchedule(TransactionCase):
+    """0.3.0: the fading rules and the frequency are the site's to change."""
+
+    def setUp(self):
+        super().setUp()
+        self.Rule = self.env["mtbg.offsite.rule"]
+        self.Backup = self.env["mtbg.offsite.backup"]
+
+    def test_default_rules_installed(self):
+        rules = self.Rule._mtbg_rules()
+        self.assertEqual([(n, e, x) for _i, n, e, x in rules], offsite.DEFAULT_RULES)
+
+    def test_custom_rules_fade(self):
+        now = datetime.datetime(2028, 11, 10, 2, 30)
+        snaps = [(i, now - datetime.timedelta(days=i)) for i in range(0, 200)]
+        rules = [(1, "Daily", 1, 14), (2, "Quarterly", 90, 0)]
+        kept = offsite.fade(snaps, now, rules)
+        self.assertEqual(sum(1 for v in kept.values() if v == "Daily"), 14)
+        self.assertTrue(2 <= sum(1 for v in kept.values() if v == "Quarterly") <= 3)
+        every = offsite.fade(snaps, now, [(1, "All", 0, 30)])
+        self.assertEqual(len(every), 30, "every snapshot for 30 days, then nothing (no forever rule)")
+
+    def test_rule_checks(self):
+        from odoo.exceptions import UserError
+        with self.assertRaises(UserError):
+            self.Rule.create({"name": "Too short", "every_days": 1, "expire_days": 3})
+        with self.assertRaises(UserError):
+            self.Rule.create({"name": "Period too long", "every_days": 40, "expire_days": 40})
+        with self.assertRaises(UserError):
+            self.Rule.create({"name": "Second forever", "every_days": 365, "expire_days": 0})
+        with self.assertRaises(UserError):
+            self.Rule.create({"name": "Same expiry", "every_days": 2, "expire_days": 30})
+        quarterly = self.Rule.create({"name": "Quarterly", "every_days": 90, "expire_days": 720})
+        self.assertIn("one every 90 day(s), until 720 days old", quarterly.summary)
+
+    def test_keep_one_rule_and_reset(self):
+        from odoo.exceptions import UserError
+        rules = self.Rule.search([])
+        rules[1:].unlink()
+        with self.assertRaises(UserError):
+            rules[0].unlink()
+        self.Rule.action_reset_defaults()
+        self.assertEqual(len(self.Rule.search([])), len(offsite.DEFAULT_RULES))
+
+    def test_frequency(self):
+        ICP = self.env["ir.config_parameter"].sudo()
+        ICP.set_param("mtbg_github_updates.offsite_enabled", "1")
+        ICP.set_param("mtbg_github_updates.offsite_every", "6")
+        ICP.set_param("mtbg_github_updates.offsite_unit", "hours")
+        self.assertEqual(self.Backup._mtbg_every_hours(), 6)
+        self.assertTrue(self.Backup._mtbg_due())
+        self.Backup.create({"stamp": "a", "taken_at": datetime.datetime.now() - datetime.timedelta(hours=3),
+                            "state": "verified"})
+        self.assertFalse(self.Backup._mtbg_due(), "3 hours ago: not yet")
+        self.Backup.search([]).write({"taken_at": datetime.datetime.now() - datetime.timedelta(hours=6)})
+        self.assertTrue(self.Backup._mtbg_due(), "6 hours ago: due")
+        ICP.set_param("mtbg_github_updates.offsite_every", "1")
+        ICP.set_param("mtbg_github_updates.offsite_unit", "weeks")
+        self.assertEqual(self.Backup._mtbg_every_hours(), 168)
+        ICP.set_param("mtbg_github_updates.offsite_hour", "0")
+        self.assertFalse(self.Backup._mtbg_due(), "a week has not passed")
+
+    def test_preview(self):
+        daily = offsite.simulate(self.Rule._mtbg_rules(), 24)
+        hourly = offsite.simulate(self.Rule._mtbg_rules(), 6)
+        self.assertTrue(15 <= daily <= 25, daily)
+        self.assertLessEqual(abs(daily - hourly), 1, "about the same number whatever the frequency")
+        panel = self.env["mtbg.offsite.panel"].create({})
+        self.assertIn("snapshots kept", panel.preview)
+        self.assertIn("Yearly (kept forever)", panel.rules_text)
+        panel.write({"offsite_every": 12, "offsite_unit": "hours"})
+        self.assertEqual(self.Backup._mtbg_frequency()[:2], (12, "hours"))
+
+    def test_migration_names_old_codes(self):
+        import importlib.util
+        b = self.Backup.create({"stamp": "m", "taken_at": datetime.datetime.now(), "state": "verified"})
+        self.env.cr.execute("UPDATE mtbg_offsite_backup SET tier = 'weekly' WHERE id = %s", [b.id])
+        path = os.path.join(os.path.dirname(offsite.__file__), "..", "migrations", "19.0.0.3.0", "post-migrate.py")
+        spec = importlib.util.spec_from_file_location("ghu_030_post", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod.migrate(self.env.cr, "19.0.0.2.0")
+        b.invalidate_recordset()
+        self.assertEqual(b.tier, "Weekly")

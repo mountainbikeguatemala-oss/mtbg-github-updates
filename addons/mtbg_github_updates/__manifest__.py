@@ -1,6 +1,6 @@
 {
     "name": "Updates from GitHub",
-    "version": "19.0.0.2.0",
+    "version": "19.0.0.3.0",
     "category": "Administration",
     "summary": "One Updates page for every product's extensions: from their GitHub releases, one module or a whole "
                "package, with backup, automatic and manual rollback",
@@ -15,7 +15,8 @@ Updates page (Settings > Updates), working on a site that has only one of them.
   ``release-<repo>-<YYYYMMDD>-<n>`` tag on the batch commit (or a commit with several module tags): one "Install
   this release" for all of them.
 * Off-site backups (0.2.0): a daily snapshot in Cloudflare R2 through Cloudflare Connector, kept on a fading
-  schedule (daily, weekly, monthly, 60-day, 180-day, yearly kept forever); Settings › Off-site backups lists
+  schedule of editable rules (default: daily, weekly, monthly, 60-day, 180-day, yearly kept forever), taken every
+  N hours / days / weeks; Settings › Off-site backups lists
   them with sizes, private download links, storage used and current charges.
 * Each update: a database backup and a filestore snapshot (the last 3 kept; refused without room); the version
   from its release tag (checked) into the store; the database upgraded in a process of its own; the site
@@ -38,6 +39,7 @@ the server's ``addons_path`` (the Updates page shows the exact line).
         "data/cron.xml",
         "views/updates_views.xml",
         "data/offsite_cron.xml",
+        "data/offsite_rules.xml",
         "views/offsite_views.xml",
     ],
     "assets": {

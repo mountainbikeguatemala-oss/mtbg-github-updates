@@ -6,3 +6,4 @@ access_mtbg_github_batch_admin,mtbg.github.batch admin,model_mtbg_github_batch,b
 access_mtbg_github_update_admin,mtbg.github.update admin,model_mtbg_github_update,base.group_system,1,1,1,0
 access_mtbg_offsite_backup_admin,mtbg.offsite.backup admin,model_mtbg_offsite_backup,base.group_system,1,1,1,1
 access_mtbg_offsite_panel_admin,mtbg.offsite.panel admin,model_mtbg_offsite_panel,base.group_system,1,1,1,1
+access_mtbg_offsite_rule_admin,mtbg.offsite.rule admin,model_mtbg_offsite_rule,base.group_system,1,1,1,1
