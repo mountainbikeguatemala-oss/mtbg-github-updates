@@ -196,8 +196,8 @@
                     </div>
                 </section>
 
-                <!-- the organization's repositories this site does not read yet -->
-                <div t-if="state.data.known.length" class="card mb-4">
+                <!-- the organization's repositories this site does not read yet; any other repository (0.3.3) -->
+                <div class="card mb-4">
                     <div class="card-body py-2">
                         <div class="small fw-bold mb-1">More repositories</div>
                         <div t-foreach="state.data.known" t-as="k" t-key="k.key" class="d-flex align-items-center gap-2 mb-1">
@@ -205,7 +205,16 @@
                             <div class="flex-grow-1 min-w-0"><span t-esc="k.name"/> <span class="small text-muted text-truncate" t-esc="k.url"/></div>
                             <button class="btn btn-sm btn-outline-secondary" t-att-disabled="state.busy" t-on-click="() => this.addKnown(k)">Add this source</button>
                         </div>
-                        <div class="small text-muted">Then give it its deploy key (Access) and Check GitHub.</div>
+                        <details class="mt-2 o_mgu_add_repository">
+                            <summary class="small">Add a repository that is not listed</summary>
+                            <div class="d-flex flex-wrap gap-2 mt-2">
+                                <input class="form-control form-control-sm" style="max-width: 14rem" name="repo_name" placeholder="Name, e.g. Bike Shop"/>
+                                <input class="form-control form-control-sm flex-grow-1" style="min-width: 16rem" name="repo_url" placeholder="git@github.com:owner/repository.git"/>
+                                <input class="form-control form-control-sm" style="max-width: 9rem" name="repo_subdir" value="addons" title="The repository's folder holding the modules (empty: its top)"/>
+                                <button class="btn btn-sm btn-outline-secondary" t-att-disabled="state.busy" t-on-click="addRepository">Add</button>
+                            </div>
+                        </details>
+                        <div class="small text-muted mt-1">Then give it its deploy key (Access) and Check GitHub.</div>
                     </div>
                 </div>
 

@@ -2,6 +2,16 @@
 
 Every version of this module, newest first. Tags: `git tag -l 'mtbg_github_updates-*'`.
 
+## 19.0.0.3.3 · 2026-11-11
+- **Bike Shop on the list** (owner, 2026-11-11: the shop could not add its new repository): More repositories offers
+  Bike Shop (`mtbgt_bikeshop`, modules in `addons`).
+- **Add a repository that is not listed**: under More repositories, its name, its GitHub address and the folder of
+  its modules (administrators only); then its deploy key and Check GitHub, as for the others.
+- **The moved modules' older releases point to their new repository**: the connectors are no longer said to be the
+  Communication Flow Designer's (every release of theirs names its repository); Visits by Script, Tiled Gallery and
+  Cloudflare Page Cache, whose older releases named none, are named by Website Blocks. A module named whole now wins
+  over another source's pattern with * (it used to be the first source listed).
+
 ## 19.0.0.3.2 · 2026-11-11
 - **Take over offers only this database's earlier updaters** (owner, 2026-11-11: the shop's Updates page offered "Tours: 44 versions. Communication Flow Designer: 10 versions"): two sites on one server share the data_dir, and the old updaters' default folders (`<data_dir>/mtbg_updates`, `<data_dir>/cfd_updates`) were the other site's. An earlier updater is now offered and taken over only when this database used it: its source model is loaded here, or its history table exists here with rows. A site that took over already loses nothing, and its own earlier updater is still offered as before. Tests: another site's store gives no banner and nothing to take; an empty history table doesn't count; history rows do, and the take-over runs.
 

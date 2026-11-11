@@ -19,18 +19,23 @@ CODE_RE = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 REPO_RE = re.compile(r"^(git@github\.com:|https://github\.com/)(?P<owner>[A-Za-z0-9_.-]+)/(?P<name>[A-Za-z0-9_.-]+?)(\.git)?$")
 MANIFEST_KEY = "mtbg_github_source"
 # the organization's repositories (owner, 2026-10-26): the page offers those this site has no source for, with one
-# click (never added on their own); patterns: for releases made before their manifests named their repository
+# click (never added on their own); patterns: for releases made before their manifests named their repository (a
+# module named whole wins over a pattern with * or ?: mtbg_tours_visit moved to Website Blocks, 0.3.3)
 KNOWN_SOURCES = (
     {"key": "tours", "name": "MTBG Tours", "code": "tours", "subdir": "addons",
      "url": "git@github.com:mountainbikeguatemala-oss/mtbg-tours.git", "module_patterns": "mtbg_tours*"},
     {"key": "blocks", "name": "Website Blocks", "code": "website_blocks", "subdir": "addons",
      "url": "git@github.com:mountainbikeguatemala-oss/mtbg-website-blocks.git",
-     "module_patterns": "mtbg_tours_bullets,mtbg_tours_content_blocks,mtbg_website_*,website_review_sync"},
+     "module_patterns": "mtbg_tours_bullets,mtbg_tours_content_blocks,mtbg_tours_visit,mtbg_tours_gallery,"
+                        "mtbg_tours_edge_cache,mtbg_website_*,website_review_sync"},
     {"key": "cfd", "name": "Communication Flow Designer", "code": "cfd", "subdir": "",
      "url": "git@github.com:mountainbikeguatemala-oss/communication-flow-designer.git",
-     "module_patterns": "communication_flow_designer*,cfd_*,google_connector,meta_connector"},
+     "module_patterns": "communication_flow_designer*,cfd_*"},
     {"key": "updates", "name": "Updates from GitHub", "code": "mtbg_github_updates", "subdir": "addons",
      "url": "git@github.com:mountainbikeguatemala-oss/mtbg-github-updates.git", "module_patterns": "mtbg_github_*"},
+    {"key": "bikeshop", "name": "Bike Shop", "code": "bikeshop", "subdir": "addons",
+     "url": "git@github.com:mountainbikeguatemala-oss/mtbgt_bikeshop.git",
+     "module_patterns": "bikeshop_*,retail_service_suite,mobile_inventory_count"},
 )
 # extensions retired (replaced by others): their old tags stay on GitHub for the sites that run them, but they are
 # never offered for a new install
@@ -109,6 +114,17 @@ class MtbgGithubSource(models.Model):
         return any(fnmatch.fnmatchcase(module, pattern.strip())
                    for pattern in (self.module_patterns or "").split(",") if pattern.strip())
 
+    def _mtbg_pattern_names(self, module):
+        """``module`` named whole in the patterns (no * or ?)."""
+        self.ensure_one()
+        return module in [p.strip() for p in (self.module_patterns or "").split(",")]
+
+    def _mtbg_pattern_source(self, module):
+        """Of these sources, the one whose patterns say ``module``: named whole first (a moved module), else the
+        first whose pattern matches it (0.3.3)."""
+        matching = self.filtered(lambda s: s._mtbg_pattern_match(module))
+        return (matching.filtered(lambda s: s._mtbg_pattern_names(module)) or matching)[:1]
+
     # ------------------------------------------------------------------ which repository a module comes from
     @api.model
     def _mtbg_installed_manifests(self):
@@ -133,7 +149,7 @@ class MtbgGithubSource(models.Model):
         repo, _subdir = declared_source(manifest)
         if repo:
             return sources.filtered(lambda s: s._mtbg_is(repo))[:1]
-        return sources.filtered(lambda s: s._mtbg_pattern_match(module))[:1]
+        return sources._mtbg_pattern_source(module)
 
     @api.model
     def _mtbg_sync_declared(self):
@@ -178,6 +194,32 @@ class MtbgGithubSource(models.Model):
         source = self.create({"name": known["name"], "code": code, "url": known["url"], "subdir": known["subdir"],
                               "module_patterns": known["module_patterns"]})
         return source.id
+
+    @api.model
+    def mtbg_add_repository(self, name, url, subdir="addons"):
+        """Add a repository that is not on the list (0.3.3: the page's "Add a repository"), administrators only: its
+        name, its SSH (or https) address on GitHub and the folder holding its modules. Then: its deploy key, Check
+        GitHub. Its modules are found by the repository their manifests name."""
+        self._mtbg_check_admin()
+        name, url, subdir = (name or "").strip(), (url or "").strip(), (subdir or "").strip().strip("/")
+        match = REPO_RE.match(url)
+        if not name or not match:
+            raise UserError(_("Give the repository a name and its GitHub address, e.g. "
+                              "git@github.com:owner/repository.git."))
+        if subdir and not re.match(r"^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$", subdir) or ".." in subdir.split("/"):
+            raise UserError(_("The modules folder is a folder of the repository, e.g. addons (empty: its top)."))
+        if self.with_context(active_test=False).search([]).filtered(lambda s: s._mtbg_is(url)):
+            raise UserError(_("This repository is a source already."))
+        base = re.sub(r"[^a-z0-9_]+", "_", match["name"].lower()).strip("_") or "source"
+        if not base[0].isalpha():
+            base = "r_" + base
+        base = base[:36]
+        code, n = base, 2
+        while self.with_context(active_test=False).search_count([("code", "=", code)]):
+            code, n = "%s_%s" % (base, n), n + 1
+        if not url.endswith(".git") and url.startswith("git@"):
+            url += ".git"
+        return self.create({"name": name[:80], "code": code, "url": url, "subdir": subdir}).id
 
     @api.model
     def _mtbg_known_hint(self):

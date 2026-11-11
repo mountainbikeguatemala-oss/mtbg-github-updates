@@ -208,6 +208,15 @@ export class MtbgGithubUpdatesPage extends Component {
         await this.load();
     }
 
+    async addRepository(ev) {
+        const box = ev.target.closest(".o_mgu_add_repository");
+        const value = (name) => box.querySelector(`input[name="${name}"]`).value;
+        const name = value("repo_name");
+        await this.orm.call(SOURCE, "mtbg_add_repository", [name, value("repo_url"), value("repo_subdir")]);
+        this.notification.add(_t("%s added: give it its deploy key (Access), then Check GitHub.", name), { type: "success" });
+        await this.load();
+    }
+
     async copyKey(section) {
         await browser.navigator.clipboard.writeText(section.public_key);
         this.notification.add(_t("Public key copied."), { type: "success" });

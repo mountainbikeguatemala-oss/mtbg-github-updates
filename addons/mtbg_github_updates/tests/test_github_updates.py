@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from odoo import sql_db
 from odoo.exceptions import UserError
-from odoo.tests import TransactionCase, tagged
+from odoo.tests import HttpCase, TransactionCase, tagged
 from odoo.tools import config
 
 from ..models import adopt, store
@@ -546,6 +546,59 @@ class TestGithubUpdates(TransactionCase):
         self.assertIn("MTBG Tours", known, "the others still offered")
         self.assertIn("does not read yet", Source._mtbg_known_hint())
 
+    def test_bike_shop_and_connector_patterns(self):
+        """0.3.3: the Bike Shop repository is on the list; the connectors are no longer said to be CFD's (every one
+        of their releases names its repository); modules moved to Website Blocks are named there."""
+        Source = self.env["mtbg.github.source"]
+        known = {k["key"]: k for k in Source._mtbg_known_missing()}
+        self.assertEqual((known["bikeshop"]["name"], known["bikeshop"]["subdir"]), ("Bike Shop", "addons"))
+        source = Source.browse(Source.mtbg_add_known("bikeshop"))
+        self.assertTrue(source.url.endswith("/mtbgt_bikeshop.git"))
+        self.assertTrue(source._mtbg_pattern_match("bikeshop_repair_station"))
+        self.assertTrue(source._mtbg_pattern_match("retail_service_suite"))
+        self.assertFalse(source._mtbg_pattern_match("mtbg_tours_core"))
+        from odoo.addons.mtbg_github_updates.models.source import KNOWN_SOURCES
+        cfd = next(k for k in KNOWN_SOURCES if k["key"] == "cfd")
+        self.assertNotIn("connector", cfd["module_patterns"])
+        blocks = next(k for k in KNOWN_SOURCES if k["key"] == "blocks")
+        for name in ("mtbg_tours_visit", "mtbg_tours_gallery", "mtbg_tours_edge_cache"):
+            self.assertIn(name, blocks["module_patterns"].split(","))
+        self.assertEqual({k["name"] for k in KNOWN_SOURCES},
+                         {"MTBG Tours", "Website Blocks", "Communication Flow Designer", "Updates from GitHub",
+                          "Bike Shop"}, "product names only on the list")
+
+    def test_named_module_wins_over_a_wildcard(self):
+        """0.3.3: an older release without the manifest key, matched by two sources' patterns: the one naming it
+        whole wins, whatever the sources' order."""
+        Source = self.env["mtbg.github.source"]
+        wide = Source.create({"name": "Wide", "code": "wide", "url": "git@github.com:o/wide.git",
+                              "module_patterns": "mgu_moved_*", "sequence": 1})
+        named = Source.create({"name": "Named", "code": "named", "url": "git@github.com:o/named.git",
+                               "module_patterns": "other,mgu_moved_x", "sequence": 99})
+        self.assertEqual(Source._mtbg_source_of("mgu_moved_x", manifest={}), named)
+        self.assertEqual(Source._mtbg_source_of("mgu_moved_y", manifest={}), wide)
+        named.sequence, wide.sequence = 1, 99
+        self.assertEqual(Source._mtbg_source_of("mgu_moved_x", manifest={}), named)
+
+    def test_add_a_repository(self):
+        """0.3.3: a repository not on the list, by its address; administrators only."""
+        Source = self.env["mtbg.github.source"]
+        source = Source.browse(Source.mtbg_add_repository(" Side Shop ", "git@github.com:o/Side-Shop", "addons/"))
+        self.assertEqual((source.name, source.code, source.url, source.subdir, source.module_patterns),
+                         ("Side Shop", "side_shop", "git@github.com:o/Side-Shop.git", "addons", False))
+        with self.assertRaisesRegex(UserError, "source already"):
+            Source.mtbg_add_repository("Again", "https://github.com/o/side-shop")
+        second = Source.browse(Source.mtbg_add_repository("Other", "git@github.com:p/side-shop.git", ""))
+        self.assertEqual((second.code, second.subdir), ("side_shop_2", ""))
+        for name, url, subdir in (("", "git@github.com:o/x.git", "addons"), ("X", "https://example.com/o/x", "addons"),
+                                  ("X", "git@github.com:o/y.git", "../etc")):
+            with self.assertRaises(UserError):
+                Source.mtbg_add_repository(name, url, subdir)
+        user = self.env["res.users"].create({"name": "Not admin", "login": "mgu_not_admin",
+                                             "group_ids": [(6, 0, [self.env.ref("base.group_user").id])]})
+        with self.assertRaisesRegex(UserError, "Only administrators"):
+            Source.with_user(user).mtbg_add_repository("Z", "git@github.com:o/z.git")
+
     def test_moved_module_newest_from_any_source(self):
         """A module released from its new repository: its newest there, though the installed manifest is the old
         repository's (no key) and the old one's patterns still match it."""
@@ -690,3 +743,21 @@ class TestGithubUpdates(TransactionCase):
         self.assertFalse(flag(), "not in the last update: folded")
         newer.undone = True
         self.assertTrue(flag(), "an update rolled back does not count")
+
+
+@tagged("post_install", "-at_install")
+class TestUpdatesPageInBrowser(HttpCase):
+    """0.3.3: the page opens in a browser, with the form adding a repository that is not listed."""
+
+    def test_page_with_the_add_form(self):
+        action = self.env.ref("mtbg_github_updates.action_mtbg_github_updates")
+        code = """
+const box = document.querySelector('.o_mgu_add_repository');
+if (box && box.querySelector('input[name="repo_url"]') && box.querySelector('button')) {
+    console.log('test successful');
+} else {
+    console.error('test failed: no Add a repository form');
+}
+"""
+        self.browser_js("/odoo/action-%d" % action.id, code, ready="!!document.querySelector('.o_mgu_add_repository')",
+                        login="admin")
