@@ -6,14 +6,21 @@
         <field name="tag">mtbg_github_updates</field>
         <field name="path">updates</field>
     </record>
+    <!-- (0.4.0: a menu of its own, its entries in board_views.xml) -->
     <menuitem id="menu_mtbg_github_updates" name="Updates" parent="base.menu_administration" sequence="60"
-              groups="base.group_system" action="action_mtbg_github_updates"/>
+              groups="base.group_system"/>
 
     <record id="view_mtbg_github_source_form" model="ir.ui.view">
         <field name="name">mtbg.github.source.form</field>
         <field name="model">mtbg.github.source</field>
         <field name="arch" type="xml">
             <form string="Update Source">
+                <header>
+                    <button name="action_check_updates" type="object" string="Check GitHub" class="btn-primary" icon="fa-refresh"/>
+                    <button name="action_test_connection" type="object" string="Test connection" icon="fa-plug"/>
+                    <button name="action_generate_key" type="object" string="New deploy key" icon="fa-key"
+                            confirm="A new key replaces this source's key: add its public key to GitHub again."/>
+                </header>
                 <sheet>
                     <group>
                         <field name="name"/>
@@ -23,6 +30,13 @@
                         <field name="short"/>
                         <field name="module_patterns"/>
                         <field name="active"/>
+                    </group>
+                    <group string="Access" invisible="not id">
+                        <div colspan="2" class="text-muted small">Add this public key to the repository on GitHub
+                            (Settings › Deploy keys, read only), then Test connection. An https repository's token is
+                            set on the Activity screen.</div>
+                        <field name="public_key" readonly="1" widget="CopyClipboardButton" invisible="not public_key"/>
+                        <field name="has_token" readonly="1"/>
                     </group>
                     <group string="Status">
                         <field name="last_check"/>

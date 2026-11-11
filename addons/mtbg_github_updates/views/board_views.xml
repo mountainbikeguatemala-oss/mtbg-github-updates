@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- the extensions board (0.4.0): one column per source, a card per extension; a list of the same; the side
+         filter; a form per extension. Odoo's own views only (a bare site, the updater updating itself). -->
+    <record id="view_mgu_extensions_kanban" model="ir.ui.view">
+        <field name="name">ir.module.module.mgu.board</field>
+        <field name="model">ir.module.module</field>
+        <field name="priority">90</field>
+        <field name="arch" type="xml">
+            <kanban js_class="mgu_board" default_group_by="mgu_board_source_id" create="0" group_create="0"
+                    group_delete="0" group_edit="0" records_draggable="0" quick_create="0" class="o_mgu_board">
+                <field name="mgu_status"/>
+                <field name="state"/>
+                <field name="mgu_shadowed"/>
+                <templates>
+                    <t t-name="card" class="o_mgu_card">
+                        <div class="d-flex align-items-start gap-2">
+                            <div class="flex-grow-1 min-w-0">
+                                <field name="shortdesc" class="fw-bold d-block text-truncate"/>
+                                <field name="name" class="small text-muted d-block text-truncate font-monospace"/>
+                            </div>
+                            <field name="mgu_status" widget="badge"
+                                   decoration-success="mgu_status == 'current'" decoration-warning="mgu_status == 'update'"
+                                   decoration-info="mgu_status == 'new'" decoration-danger="mgu_status == 'error'"
+                                   decoration-muted="mgu_status == 'local'"/>
+                        </div>
+                        <div class="small mt-1">
+                            <span class="text-muted">Running</span> <field name="mgu_board_running"/>
+                            <span t-if="record.mgu_board_available.raw_value" class="ms-2">
+                                <span class="text-muted">GitHub</span> <field name="mgu_board_available"/>
+                            </span>
+                        </div>
+                        <div class="small text-muted mt-1">
+                            <i class="fa fa-folder-o me-1"/><field name="mgu_folder_kind"/>
+                            <span t-if="record.mgu_shadowed.raw_value" class="text-danger ms-1"
+                                  t-att-title="record.mgu_shadowed.raw_value">(hidden behind another copy)</span>
+                        </div>
+                        <div class="small mt-1 o_mgu_needs">
+                            <span class="text-muted">Needs</span>
+                            <field name="mgu_needs_ids" widget="many2many_tags"/>
+                        </div>
+                        <div class="small mt-1 o_mgu_used_by">
+                            <span class="text-muted">Used by</span>
+                            <field name="mgu_used_by_ids" widget="many2many_tags"/>
+                        </div>
+                        <footer class="mt-2 pt-1">
+                            <button name="action_mgu_open_one" type="object" class="btn btn-sm btn-primary"
+                                    invisible="mgu_status != 'update'">Update…</button>
+                            <button name="action_mgu_open_one" type="object" class="btn btn-sm btn-primary"
+                                    invisible="mgu_status != 'new'">Install…</button>
+                            <button name="action_mgu_open_one" type="object" class="btn btn-sm btn-secondary"
+                                    invisible="mgu_status not in ('current', 'error')">Versions…</button>
+                        </footer>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <record id="view_mgu_extensions_list" model="ir.ui.view">
+        <field name="name">ir.module.module.mgu.list</field>
+        <field name="model">ir.module.module</field>
+        <field name="priority">90</field>
+        <field name="arch" type="xml">
+            <list create="0" edit="0" delete="0" class="o_mgu_list" default_group_by="mgu_board_source_id">
+                <field name="shortdesc" string="Extension"/>
+                <field name="name" optional="show"/>
+                <field name="mgu_board_source_id"/>
+                <field name="mgu_board_running"/>
+                <field name="mgu_board_available"/>
+                <field name="mgu_status" widget="badge" decoration-success="mgu_status == 'current'"
+                       decoration-warning="mgu_status == 'update'" decoration-info="mgu_status == 'new'"
+                       decoration-danger="mgu_status == 'error'" decoration-muted="mgu_status == 'local'"/>
+                <field name="mgu_folder_kind"/>
+                <field name="mgu_folder" optional="hide"/>
+                <field name="mgu_needs_ids" widget="many2many_tags" optional="show"/>
+                <field name="mgu_used_by_ids" widget="many2many_tags" optional="hide"/>
+                <button name="action_mgu_open_one" type="object" string="Open in Activity" icon="fa-arrow-right"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_mgu_extensions_form" model="ir.ui.view">
+        <field name="name">ir.module.module.mgu.form</field>
+        <field name="model">ir.module.module</field>
+        <field name="priority">90</field>
+        <field name="arch" type="xml">
+            <form create="0" edit="0" delete="0" class="o_mgu_form">
+                <header>
+                    <button name="action_mgu_open_one" type="object" class="btn-primary" string="Update…"
+                            invisible="mgu_status != 'update'"/>
+                    <button name="action_mgu_open_one" type="object" class="btn-primary" string="Install…"
+                            invisible="mgu_status != 'new'"/>
+                    <button name="action_mgu_open_one" type="object" string="Versions and going back…"
+                            invisible="mgu_status not in ('current', 'error', 'update')"/>
+                    <button name="action_mgu_open_github" type="object" string="Open on GitHub" icon="fa-github"
+                            invisible="not mgu_board_source_id"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="shortdesc" readonly="1"/></h1>
+                        <div class="text-muted font-monospace"><field name="name" readonly="1"/></div>
+                        <field name="mgu_status" widget="badge" decoration-success="mgu_status == 'current'"
+                               decoration-warning="mgu_status == 'update'" decoration-info="mgu_status == 'new'"
+                               decoration-danger="mgu_status == 'error'" decoration-muted="mgu_status == 'local'"/>
+                    </div>
+                    <group>
+                        <group string="Versions">
+                            <field name="mgu_board_running"/>
+                            <field name="mgu_board_available"/>
+                            <field name="state" string="In this database"/>
+                        </group>
+                        <group string="Where from">
+                            <field name="mgu_board_source_id"/>
+                            <field name="mgu_folder_kind"/>
+                            <field name="mgu_folder"/>
+                            <field name="mgu_shadowed" invisible="not mgu_shadowed"/>
+                        </group>
+                    </group>
+                    <group string="Dependencies">
+                        <field name="mgu_needs_ids" widget="many2many_tags" readonly="1"/>
+                        <field name="mgu_used_by_ids" widget="many2many_tags" readonly="1"/>
+                    </group>
+                    <separator string="Releases"/>
+                    <field name="mgu_release_ids" readonly="1" nolabel="1">
+                        <list>
+                            <field name="version"/>
+                            <field name="tag"/>
+                            <field name="source_id"/>
+                            <field name="date"/>
+                            <field name="in_store"/>
+                            <field name="is_active"/>
+                            <field name="notes" optional="hide"/>
+                        </list>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_mgu_extensions_search" model="ir.ui.view">
+        <field name="name">ir.module.module.mgu.search</field>
+        <field name="model">ir.module.module</field>
+        <field name="priority">90</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="shortdesc" string="Extension" filter_domain="['|', ('shortdesc', 'ilike', self), ('name', 'ilike', self)]"/>
+                <field name="mgu_board_source_id"/>
+                <filter name="from_github" string="From GitHub" domain="[('mgu_board_source_id', '!=', False)]"/>
+                <filter name="installed" string="Installed" domain="[('state', 'in', ('installed', 'to upgrade'))]"/>
+                <filter name="not_installed" string="Not installed" domain="[('state', 'not in', ('installed', 'to upgrade', 'to install'))]"/>
+                <separator/>
+                <filter name="to_update" string="Update ready" domain="[('mgu_status', '=', 'update')]"/>
+                <filter name="shadowed" string="Hidden behind another copy" domain="[('mgu_shadowed', '!=', False)]"/>
+                <group>
+                    <filter name="group_source" string="Source" context="{'group_by': 'mgu_board_source_id'}"/>
+                    <filter name="group_status" string="Status" context="{'group_by': 'mgu_status'}"/>
+                    <filter name="group_folder" string="Folder" context="{'group_by': 'mgu_folder'}"/>
+                </group>
+                <searchpanel>
+                    <field name="mgu_board_source_id" string="Source" icon="fa-github" enable_counters="1"/>
+                    <field name="mgu_status" string="Status" icon="fa-flag" select="multi" enable_counters="1"/>
+                    <field name="mgu_folder_kind" string="Folder" icon="fa-folder" select="multi" enable_counters="1"/>
+                </searchpanel>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_mgu_extensions" model="ir.actions.act_window">
+        <field name="name">Extensions</field>
+        <field name="res_model">ir.module.module</field>
+        <field name="path">updates-extensions</field>
+        <field name="view_mode">kanban,list,form</field>
+        <field name="domain">[('mgu_board', '=', True)]</field>
+        <field name="context">{'search_default_from_github': 1}</field>
+        <field name="search_view_id" ref="view_mgu_extensions_search"/>
+        <field name="view_ids" eval="[(5, 0, 0),
+            (0, 0, {'view_mode': 'kanban', 'view_id': ref('view_mgu_extensions_kanban')}),
+            (0, 0, {'view_mode': 'list', 'view_id': ref('view_mgu_extensions_list')}),
+            (0, 0, {'view_mode': 'form', 'view_id': ref('view_mgu_extensions_form')})]"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No extension from GitHub yet</p>
+            <p>Add a source (Activity › More repositories), give it its deploy key, then Check GitHub.</p>
+        </field>
+    </record>
+    <record id="action_mgu_extensions_open" model="ir.actions.server">
+        <field name="name">Extensions</field>
+        <field name="model_id" ref="base.model_ir_module_module"/>
+        <field name="state">code</field>
+        <field name="code">action = model.action_mgu_board()</field>
+    </record>
+
+    <record id="view_mtbg_github_source_list" model="ir.ui.view">
+        <field name="name">mtbg.github.source.list</field>
+        <field name="model">mtbg.github.source</field>
+        <field name="arch" type="xml">
+            <list string="Sources">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="url"/>
+                <field name="subdir"/>
+                <field name="has_key" string="Deploy key"/>
+                <field name="last_check"/>
+                <field name="last_error" optional="show"/>
+                <field name="release_count"/>
+                <field name="active" optional="hide"/>
+            </list>
+        </field>
+    </record>
+    <record id="action_mgu_sources" model="ir.actions.act_window">
+        <field name="name">Sources</field>
+        <field name="res_model">mtbg.github.source</field>
+        <field name="view_mode">list,form</field>
+        <field name="context">{'active_test': False}</field>
+    </record>
+
+    <record id="view_mtbg_github_release_list" model="ir.ui.view">
+        <field name="name">mtbg.github.release.list</field>
+        <field name="model">mtbg.github.release</field>
+        <field name="arch" type="xml">
+            <list string="Releases" create="0" edit="0">
+                <field name="module"/>
+                <field name="version"/>
+                <field name="source_id"/>
+                <field name="tag" optional="hide"/>
+                <field name="date"/>
+                <field name="in_store"/>
+                <field name="is_active"/>
+            </list>
+        </field>
+    </record>
+    <record id="view_mtbg_github_package_list" model="ir.ui.view">
+        <field name="name">mtbg.github.package.list</field>
+        <field name="model">mtbg.github.package</field>
+        <field name="arch" type="xml">
+            <list string="Release packages" create="0" edit="0">
+                <field name="name"/>
+                <field name="tag"/>
+                <field name="source_id"/>
+                <field name="date"/>
+                <field name="release_ids" widget="many2many_tags" optional="show"/>
+            </list>
+        </field>
+    </record>
+    <record id="action_mgu_releases" model="ir.actions.act_window">
+        <field name="name">Releases</field>
+        <field name="res_model">mtbg.github.release</field>
+        <field name="view_mode">list,form</field>
+    </record>
+    <record id="action_mgu_packages" model="ir.actions.act_window">
+        <field name="name">Release packages</field>
+        <field name="res_model">mtbg.github.package</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <!-- Settings › Updates: the board first; the Activity screen (Update all, packages, history, rollback,
+         take-over) as before -->
+    <record id="menu_mtbg_github_updates" model="ir.ui.menu">
+        <field name="action" eval="False"/>
+    </record>
+    <menuitem id="menu_mgu_extensions" name="Extensions" parent="menu_mtbg_github_updates" sequence="1"
+              groups="base.group_system" action="action_mgu_extensions_open"/>
+    <menuitem id="menu_mgu_activity" name="Activity" parent="menu_mtbg_github_updates" sequence="2"
+              groups="base.group_system" action="action_mtbg_github_updates"/>
+    <menuitem id="menu_mgu_packages" name="Release packages" parent="menu_mtbg_github_updates" sequence="3"
+              groups="base.group_system" action="action_mgu_packages"/>
+    <menuitem id="menu_mgu_releases" name="Releases" parent="menu_mtbg_github_updates" sequence="4"
+              groups="base.group_system" action="action_mgu_releases"/>
+    <menuitem id="menu_mgu_sources" name="Sources" parent="menu_mtbg_github_updates" sequence="5"
+              groups="base.group_system" action="action_mgu_sources"/>
+    <menuitem id="menu_mgu_history" name="History" parent="menu_mtbg_github_updates" sequence="6"
+              groups="base.group_system" action="action_mtbg_github_update_log"/>
+</odoo>

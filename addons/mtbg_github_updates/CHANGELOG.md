@@ -2,6 +2,25 @@
 
 Every version of this module, newest first. Tags: `git tag -l 'mtbg_github_updates-*'`.
 
+## 19.0.0.4.0 · 2026-11-11
+- **The extensions board** (owner, 2026-11-11: "kanban style view for different sources / extensions and their
+  dependencies and a list view with a side filter"; "different columns for different sources, card / list view"):
+  Settings › Updates › Extensions. One column per source (repository), "Not from GitHub" last; each column's header
+  has the source's Check GitHub, Access (its deploy key) and Test connection. A card per extension: the version
+  running and the newest on GitHub, its status (Update, New, Up to date, Not from GitHub, Error after a failed or
+  stuck update), the folder its code loads from (the Updates store, another addons folder, Odoo; "hidden behind
+  another copy" when the store's version is not the one loaded), what it needs and what uses it, across
+  repositories. Update…, Install… and Versions… open the Activity screen on that extension (the confirmation, the
+  backup and the restart as before).
+- The list of the same extensions (the Card / List switch), grouped by source; the side filter by source, status
+  and folder; filters Installed, Not installed, Update ready, Hidden; group by folder path. A form per extension:
+  versions, where from, needs and used by, its releases, Open on GitHub.
+- The Updates menu: Extensions, Activity (the page as before: Update all, release packages, history, rollback,
+  take-over), Release packages, Releases, Sources, History. A source's form has Check GitHub, Test connection, New
+  deploy key and its public key to copy.
+- Odoo's own kanban, list, form and search panel only: the updater still runs on a bare site and updates itself.
+  The board's values are kept on the extensions and refreshed when the board opens and after Check GitHub.
+
 ## 19.0.0.3.3 · 2026-11-11
 - **Bike Shop on the list** (owner, 2026-11-11: the shop could not add its new repository): More repositories offers
   Bike Shop (`mtbgt_bikeshop`, modules in `addons`).

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="mtbg_github_updates.BoardHeader" t-inherit="web.KanbanHeader" t-inherit-mode="primary">
+        <xpath expr="//div[@t-if='!group.isFolded']/span[hasclass('text-truncate')]" position="attributes">
+            <attribute name="t-esc">mguTitle</attribute>
+        </xpath>
+        <xpath expr="//div[hasclass('o_kanban_header_title')]" position="after">
+            <div t-if="mguSourceId and (env.isSmall or !group.isFolded)" class="o_mgu_source_tools d-flex flex-wrap gap-2 small pb-1">
+                <a href="#" class="o_mgu_check" t-on-click.prevent="() => this.mguRun('action_check_updates')"><i class="fa fa-refresh me-1"/>Check GitHub</a>
+                <a href="#" class="o_mgu_access" t-on-click.prevent="() => this.mguRun('action_mgu_access')"><i class="fa fa-key me-1"/>Access</a>
+                <a href="#" class="o_mgu_test" t-on-click.prevent="() => this.mguRun('action_test_connection')"><i class="fa fa-plug me-1"/>Test connection</a>
+            </div>
+        </xpath>
+    </t>
+</templates>

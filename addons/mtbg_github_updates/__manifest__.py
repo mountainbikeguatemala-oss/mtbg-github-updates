@@ -1,6 +1,6 @@
 {
     "name": "Updates from GitHub",
-    "version": "19.0.0.3.3",
+    "version": "19.0.0.4.0",
     "category": "Administration",
     "summary": "One Updates page for every product's extensions: from their GitHub releases, one module or a whole "
                "package, with backup, automatic and manual rollback",
@@ -38,6 +38,7 @@ the server's ``addons_path`` (the Updates page shows the exact line).
         "security/ir.model.access.csv",
         "data/cron.xml",
         "views/updates_views.xml",
+        "views/board_views.xml",
         "data/offsite_cron.xml",
         "data/offsite_rules.xml",
         "views/offsite_views.xml",

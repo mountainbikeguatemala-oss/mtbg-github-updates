@@ -11,3 +11,4 @@ from . import ir_module
 from . import page
 from . import offsite
 from . import res_config_settings
+from . import board

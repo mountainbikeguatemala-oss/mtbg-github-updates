@@ -1,0 +1,8 @@
+.o_mgu_board {
+    .o_kanban_group {
+        min-width: 20rem;
+    }
+    .o_mgu_needs .o_field_many2many_tags, .o_mgu_used_by .o_field_many2many_tags {
+        display: inline;
+    }
+}
