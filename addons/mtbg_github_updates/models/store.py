@@ -316,6 +316,22 @@ def _show(source_code, url, subdir, module, tag, relpath):
     return run_git(source_code, url, "show", "%s:%s/%s" % (tag, inner, relpath), git_dir=mirror_path(source_code))
 
 
+def release_files(source_code, url, subdir, module, tag, suffixes=(".py", ".xml", ".csv")):
+    """{relative path: text} of ``module``'s files at release ``tag`` ending in ``suffixes`` (read from the mirror,
+    nothing extracted, nothing run)."""
+    if not TAG_RE.match(tag) or not MODULE_RE.match(module):
+        raise StoreError("Not a release tag: %s" % tag)
+    inner = "%s/%s" % (subdir.strip("/"), module) if subdir else module
+    listing = run_git(source_code, url, "ls-tree", "-r", "--name-only", tag, "--", inner + "/",
+                      git_dir=mirror_path(source_code))
+    files = {}
+    for line in listing.splitlines():
+        rel = line[len(inner) + 1:] if line.startswith(inner + "/") else ""
+        if rel and rel.endswith(suffixes) and "/tests/" not in "/" + rel and not rel.startswith("migrations/"):
+            files[rel] = _show(source_code, url, subdir, module, tag, rel)
+    return files
+
+
 def release_manifest(source_code, url, subdir, module, tag):
     """The manifest of ``module`` at release ``tag``, read from the mirror (nothing extracted)."""
     text = _show(source_code, url, subdir, module, tag, "__manifest__.py")

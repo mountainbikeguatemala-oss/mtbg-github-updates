@@ -18,8 +18,11 @@
                 <header>
                     <button name="action_check_updates" type="object" string="Check GitHub" class="btn-primary" icon="fa-refresh"/>
                     <button name="action_test_connection" type="object" string="Test connection" icon="fa-plug"/>
-                    <button name="action_generate_key" type="object" string="New deploy key" icon="fa-key"
-                            confirm="A new key replaces this source's key: add its public key to GitHub again."/>
+                    <button name="action_generate_key" type="object" string="Create a key" icon="fa-key"
+                            context="{'mgu_from_form': 1}" invisible="has_key"/>
+                    <button name="action_generate_key" type="object" string="Replace the key" icon="fa-key"
+                            context="{'mgu_from_form': 1}" invisible="not has_key"
+                            confirm="A new key replaces this source's key: the one on GitHub stops working until you add the new one there."/>
                 </header>
                 <sheet>
                     <group>
@@ -32,10 +35,16 @@
                         <field name="active"/>
                     </group>
                     <group string="Access" invisible="not id">
-                        <div colspan="2" class="text-muted small">Add this public key to the repository on GitHub
-                            (Settings › Deploy keys, read only), then Test connection. An https repository's token is
-                            set on the Activity screen.</div>
-                        <field name="public_key" readonly="1" widget="CopyClipboardButton" invisible="not public_key"/>
+                        <field name="has_key" invisible="1"/>
+                        <div colspan="2" class="text-muted small" invisible="has_key">No key yet: Create a key (above),
+                            then add it on GitHub.</div>
+                        <div colspan="2" class="small" invisible="not has_key">Copy this public key and add it to the
+                            repository on GitHub: Settings › Deploy keys › Add deploy key (leave "Allow write access"
+                            off). Then Test connection and Check GitHub.</div>
+                        <field name="public_key" readonly="1" nolabel="1" colspan="2" class="font-monospace text-break"
+                               invisible="not has_key"/>
+                        <field name="public_key" readonly="1" widget="CopyClipboardButton" string="Copy the key"
+                               invisible="not has_key"/>
                         <field name="has_token" readonly="1"/>
                     </group>
                     <group string="Status">

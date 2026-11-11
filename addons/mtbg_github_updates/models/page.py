@@ -164,6 +164,11 @@ class MtbgGithubSource(models.Model):
         self._mtbg_check_admin()
         Update = self.env["mtbg.github.update"]
         plan, package = self._mtbg_plan_of(kind, ids)
+        held = []
+        if kind == "all":  # (0.4.2: the updates that would install a duplicate of an installed module wait)
+            plan, held = Update._mtbg_hold_back(plan)
+            if not plan:
+                return {"ok": False, "problem": "\n".join(reason for _m, reason in held)}
         try:
             everything = Update._mtbg_full_plan(plan)
             Update._mtbg_check_no_downgrade(everything)
@@ -177,7 +182,8 @@ class MtbgGithubSource(models.Model):
         return {"ok": not shadows, "problem": "\n".join(shadows), "rows": rows,
                 "skipped": [{"module": m, "version": r.version, "what": what} for m, r, what in
                             (package._mtbg_plan() if package else [])
-                            if what != "update" and m not in {row["module"] for row in rows}]}
+                            if what != "update" and m not in {row["module"] for row in rows}]
+                + [{"module": m, "version": "", "what": reason, "held": True} for m, reason in held]}
 
     @api.model
     def _mtbg_plan_of(self, kind, ids):
@@ -212,5 +218,9 @@ class MtbgGithubSource(models.Model):
         """The confirmed batch: backup, store, switch, upgrade in a process of its own, restart."""
         self._mtbg_check_admin()
         plan, package = self._mtbg_plan_of(kind, ids)
+        if kind == "all":
+            plan, _held = self.env["mtbg.github.update"]._mtbg_hold_back(plan)
+            if not plan:
+                raise UserError("\n".join(reason for _m, reason in _held))
         return self.env["mtbg.github.update"]._mtbg_start(
             plan, kind={"install": "install", "package": "package"}.get(kind, "update"), package=package)

@@ -282,7 +282,7 @@
                     </tbody>
                 </table>
                 <div t-if="props.plan.skipped and props.plan.skipped.length" class="small text-muted mb-2">
-                    Left out here: <t t-foreach="props.plan.skipped" t-as="s" t-key="s.module"><t t-esc="s.module"/> (<t t-esc="s.what === 'same' ? 'up to date' : 'not on this site'"/>) </t>
+                    Left out here: <t t-foreach="props.plan.skipped" t-as="s" t-key="s.module"><t t-esc="s.module"/> (<t t-if="s.held">held back: <t t-esc="s.what"/></t><t t-else="" t-esc="s.what === 'same' ? 'up to date' : 'not on this site'"/>) </t>
                 </div>
                 <div class="small text-muted">A database backup and a files snapshot are taken first; the site restarts (about half a minute without access). If the upgrade fails, the previous versions come back by themselves.</div>
             </t>

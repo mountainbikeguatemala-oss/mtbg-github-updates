@@ -159,6 +159,24 @@ class MtbgGithubSource(models.Model):
         self.env["ir.module.module"]._mgu_board_refresh()
         return result
 
+    def action_generate_key(self):
+        """From the source's form (0.4.2: the owner saw nothing happen): the form again, its new public key on it to
+        copy; elsewhere as before (a notification)."""
+        result = super().action_generate_key()
+        if self.env.context.get("mgu_from_form") or self.env.context.get("mgu_show_key"):
+            return self._mgu_key_popup()
+        return result
+
+    def _mgu_key_popup(self):
+        """The new key in a popup (owner, 2026-11-11: "display the key in the popup with a copy button after you
+        click new key"): copied at once where the browser allows it, a Copy button, and GitHub's page to add it."""
+        self.ensure_one()
+        self.invalidate_recordset(["public_key", "has_key"])
+        match = REPO_RE.match((self.url or "").strip())
+        github = "https://github.com/%s/settings/keys/new" % match["path"] if match else ""
+        return {"type": "ir.actions.client", "tag": "mgu_new_key", "target": "new", "name": _("Deploy key: %s", self.name),
+                "params": {"key": self.public_key or "", "source": self.name, "github_url": github}}
+
     def action_mgu_access(self):
         """The column's Access: the source's form (deploy key, address, folder)."""
         self._mtbg_check_admin()

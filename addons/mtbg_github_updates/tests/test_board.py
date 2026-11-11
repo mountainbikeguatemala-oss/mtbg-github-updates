@@ -226,3 +226,66 @@ const wait = (test, what) => new Promise((ok, ko) => { let n = 0; const t = setI
         board = self.env.ref("mtbg_github_updates.action_mgu_extensions")
         self.browser_js("/odoo/action-%d" % board.id, code, login="admin")
         self.browser_js("/odoo/updates", code, login="admin")
+
+
+@tagged("post_install", "-at_install")
+class TestSourceKeyInBrowser(HttpCase):
+    """0.4.2 (owner: "you click New deploy key and nothing happens"): Create a key shows the key, to copy, on the
+    source's form."""
+
+    def test_create_a_key_shows_it(self):
+        source = self.env["mtbg.github.source"].create({"name": "Key Repo", "code": "key_repo",
+                                                         "url": "git@github.com:o/key-repo.git"})
+        made = {}
+        generate = patch.object(store, "generate_key", side_effect=lambda code, comment: made.setdefault(code, True))
+        public = patch.object(store, "public_key", side_effect=lambda code: "ssh-ed25519 AAAAKEYTEST odoo-test"
+                              if made.get(code) else "")
+        tokens = patch.object(store, "read_token", return_value="")
+        for p in (generate, public, tokens):
+            p.start()
+            self.addCleanup(p.stop)
+        action = self.env.ref("mtbg_github_updates.action_mgu_sources")
+        code = """
+const wait = (test, what) => new Promise((ok, ko) => { let n = 0; const t = setInterval(() => {
+    const v = test(); if (v) { clearInterval(t); ok(v); } else if (++n > 150) { clearInterval(t); ko(new Error(what)); } }, 100); });
+(async () => {
+    const button = await wait(() => [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Create a key'), 'no Create a key');
+    button.click();
+    const text = await wait(() => document.querySelector('.modal .o_mgu_key_text'), 'no popup with the key');
+    if (text.value !== 'ssh-ed25519 AAAAKEYTEST odoo-test') throw new Error('the popup shows ' + text.value);
+    if (!document.querySelector('.modal .o_mgu_copy_key')) throw new Error('no Copy button');
+    const github = [...document.querySelectorAll('.modal a')].find((a) => a.href.includes('github.com/o/key-repo/settings/keys/new'));
+    if (!github) throw new Error('no link to GitHub');
+    [...document.querySelectorAll('.modal button')].find((b) => b.textContent.trim() === 'Done').click();
+    await wait(() => !document.querySelector('.modal .o_mgu_key_text'), 'Done did not close the popup');
+    await wait(() => document.body.textContent.includes('ssh-ed25519 AAAAKEYTEST'), 'the form does not show the key after');
+    console.log('test successful');
+})().catch((e) => console.error('test failed: ' + e.message));
+"""
+        self.browser_js("/odoo/action-%d/%d" % (action.id, source.id), code, login="admin")
+
+    def test_create_a_key_on_activity_shows_it(self):
+        self.env["mtbg.github.source"].with_context(active_test=False).search([]).unlink()
+        self.env["mtbg.github.source"].create({"name": "Key Repo", "code": "key_repo2",
+                                               "url": "git@github.com:o/key-repo.git"})
+        made = {}
+        for p in (patch.object(store, "generate_key", side_effect=lambda code, comment: made.setdefault(code, True)),
+                  patch.object(store, "public_key", side_effect=lambda code: "ssh-ed25519 AAAAKEYTEST odoo-test"
+                               if made.get(code) else ""),
+                  patch.object(store, "read_token", return_value="")):
+            p.start()
+            self.addCleanup(p.stop)
+        code = """
+const wait = (test, what) => new Promise((ok, ko) => { let n = 0; const t = setInterval(() => {
+    const v = test(); if (v) { clearInterval(t); ok(v); } else if (++n > 150) { clearInterval(t); ko(new Error(what)); } }, 100); });
+(async () => {
+    const access = await wait(() => [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Access'), 'no Access');
+    access.click();
+    const create = await wait(() => [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Create a key'), 'no Create a key');
+    create.click();
+    const text = await wait(() => document.querySelector('.modal .o_mgu_key_text'), 'no popup with the key');
+    if (text.value !== 'ssh-ed25519 AAAAKEYTEST odoo-test') throw new Error('the popup shows ' + text.value);
+    console.log('test successful');
+})().catch((e) => console.error('test failed: ' + e.message));
+"""
+        self.browser_js("/odoo/updates", code, login="admin")

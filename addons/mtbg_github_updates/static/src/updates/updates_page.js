@@ -190,8 +190,14 @@ export class MtbgGithubUpdatesPage extends Component {
         return this.run(SOURCE, "action_test_connection", [[section.id]]);
     }
 
-    createKey(section) {
-        return this.run(SOURCE, "action_generate_key", [[section.id]]);
+    async createKey(section) {
+        // (0.4.2) the new key in a popup with its Copy button; the page reloads when it closes
+        const result = await this.orm.call(SOURCE, "action_generate_key", [[section.id]], { context: { mgu_show_key: true } });
+        if (result && result.type) {
+            await this.action.doAction(result, { onClose: () => this.load() });
+        } else {
+            await this.load();
+        }
     }
 
     async saveToken(section, ev) {

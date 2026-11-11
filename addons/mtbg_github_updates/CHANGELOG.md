@@ -2,6 +2,19 @@
 
 Every version of this module, newest first. Tags: `git tag -l 'mtbg_github_updates-*'`.
 
+## 19.0.0.4.2 · 2026-11-11
+- **No install of a duplicate of an installed module**: a release that would install a module whose models another
+  installed module already defines, or with most of its records (5 or more) under another installed module's names
+  (e.g. a module renamed in a new repository, offered as new beside the old one), is refused with the reason; its data
+  must be moved first (a rename). Update all holds back the updates that would bring such a module (listed as held
+  back) and goes on with the others. Read from the release's own files in the mirror: nothing is run. A planned move
+  is declared in the new module's manifest, `'mtbg_takes_over': ['old_module', ...]` (with its pre_init hook moving
+  those modules' xml ids): those pairs install; any other duplicate is still refused.
+- **The new deploy key in a popup** (owner, 2026-11-11: "you click New deploy key and nothing happens"; "display the
+  key in the popup with a copy button"): Create a key (the source's form and the Activity screen's Access) shows the
+  key, copied at once where the browser allows it, a Copy the key button, the steps, and a link to GitHub's Add
+  deploy key page for that repository. The form shows the key with its steps; Replace the key asks first.
+
 ## 19.0.0.4.1 · 2026-11-11
 - **Add a repository, where it is looked for** (owner, 2026-11-11: "with the new updater I see no way to add a new
   repository"): an Add a repository button in the Extensions board's and list's top bar, the Activity screen's header

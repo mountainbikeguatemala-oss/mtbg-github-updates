@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="mtbg_github_updates.NewKey">
+        <div class="o_mgu_new_key p-3">
+            <p class="mb-2">This is <b t-esc="params.source"/>'s new key. Add it on GitHub so this site can read the repository:</p>
+            <ol class="small mb-3">
+                <li>Copy the key<t t-if="state.copied"> (already copied)</t>.</li>
+                <li>On GitHub, Add deploy key: give it a title (e.g. this site's name), paste the key, leave "Allow write access" off, Add key.</li>
+                <li>Back here: Test connection, then Check GitHub.</li>
+            </ol>
+            <textarea class="form-control font-monospace small o_mgu_key_text" rows="3" readonly="readonly" t-att-value="params.key" onclick="this.select()"/>
+            <div class="d-flex flex-wrap gap-2 mt-3">
+                <button class="btn btn-primary o_mgu_copy_key" t-on-click="() => this.copy()"><i class="fa fa-clipboard me-1"/>Copy the key</button>
+                <a t-if="params.github_url" class="btn btn-secondary" t-att-href="params.github_url" target="_blank" rel="noopener"><i class="fa fa-github me-1"/>Open GitHub's Add deploy key</a>
+                <button class="btn btn-link ms-auto" t-on-click="close">Done</button>
+            </div>
+        </div>
+    </t>
+</templates>
