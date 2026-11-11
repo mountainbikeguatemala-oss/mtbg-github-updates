@@ -2,6 +2,13 @@
 
 Every version of this module, newest first. Tags: `git tag -l 'mtbg_github_updates-*'`.
 
+## 19.0.0.4.1 · 2026-11-11
+- **Add a repository, where it is looked for** (owner, 2026-11-11: "with the new updater I see no way to add a new
+  repository"): an Add a repository button in the Extensions board's and list's top bar, the Activity screen's header
+  and Sources. One form: the organization's repositories this site does not read yet (e.g. Bike Shop) or any other
+  GitHub address; once added, its deploy key is made and its Access form opens (add the key on GitHub, Test
+  connection, Check GitHub).
+
 ## 19.0.0.4.0 · 2026-11-11
 - **The extensions board** (owner, 2026-11-11: "kanban style view for different sources / extensions and their
   dependencies and a list view with a side filter"; "different columns for different sources, card / list view"):

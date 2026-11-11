@@ -169,3 +169,60 @@ const wait = (test, what) => new Promise((ok, ko) => { let n = 0; const t = setI
     if (!form.textContent.includes('19.0.99.0.0')) throw new Error('no releases in the form');
 """)
         self.browser_js("/odoo/action-%d" % self.action.id, code, login="admin")
+
+
+@tagged("post_install", "-at_install")
+class TestAddRepository(TransactionCase):
+    """0.4.1 (owner: "with the new updater I see no way to add a new repository"): one form for the list's
+    repositories and any other, straight on to its access."""
+
+    def setUp(self):
+        super().setUp()
+        self.Source = self.env["mtbg.github.source"]
+        self.Source.with_context(active_test=False).search([]).unlink()
+        self.Add = self.env["mtbg.github.source.add"]
+        keys = patch.object(store, "generate_key", return_value=None)
+        keys.start()
+        self.addCleanup(keys.stop)
+
+    def test_a_listed_repository(self):
+        choices = dict(self.Add._known_selection())
+        self.assertIn("bikeshop", choices)
+        self.assertIn("other", choices)
+        action = self.Add.create({"known": "bikeshop"}).action_add()
+        source = self.Source.search([("code", "=", "bikeshop")])
+        self.assertEqual((source.name, source.subdir), ("Bike Shop", "addons"))
+        self.assertEqual((action["res_model"], action["res_id"], action["target"]),
+                         ("mtbg.github.source", source.id, "new"), "straight on to its access")
+        self.assertNotIn("bikeshop", dict(self.Add._known_selection()), "offered once")
+
+    def test_another_repository(self):
+        self.Add.create({"known": "other", "name": "Side Shop", "url": "git@github.com:o/side-shop.git",
+                         "subdir": "addons"}).action_add()
+        self.assertTrue(self.Source.search([("code", "=", "side_shop")]))
+
+    def test_opened_from_the_screens(self):
+        self.assertEqual(self.Add.action_mgu_open()["res_model"], "mtbg.github.source.add")
+        board = self.env.ref("mtbg_github_updates.view_mgu_extensions_kanban").arch
+        self.assertIn("action_mgu_source_add", board.replace(str(self.env.ref(
+            "mtbg_github_updates.action_mgu_source_add").id), "action_mgu_source_add"))
+
+
+@tagged("post_install", "-at_install")
+class TestAddRepositoryInBrowser(HttpCase):
+
+    def test_buttons_on_the_board_and_activity(self):
+        code = """
+const wait = (test, what) => new Promise((ok, ko) => { let n = 0; const t = setInterval(() => {
+    const v = test(); if (v) { clearInterval(t); ok(v); } else if (++n > 150) { clearInterval(t); ko(new Error(what)); } }, 100); });
+(async () => {
+    const button = await wait(() => [...document.querySelectorAll('button')].find((b) => b.textContent.includes('Add a repository')), 'no Add a repository button');
+    button.click();
+    await wait(() => document.querySelector('.modal .o_form_view'), 'the button opened no form');
+    if (!document.querySelector('.modal').textContent.includes('Another repository')) throw new Error('no other-repository choice');
+    console.log('test successful');
+})().catch((e) => console.error('test failed: ' + e.message));
+"""
+        board = self.env.ref("mtbg_github_updates.action_mgu_extensions")
+        self.browser_js("/odoo/action-%d" % board.id, code, login="admin")
+        self.browser_js("/odoo/updates", code, login="admin")

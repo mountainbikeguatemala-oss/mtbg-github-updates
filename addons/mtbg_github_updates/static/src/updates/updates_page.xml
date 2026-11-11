@@ -43,6 +43,9 @@
                         <button class="btn btn-secondary" t-att-class="{ active: state.tab === 'releases' }" t-on-click="() => this.setTab('releases')">Releases</button>
                         <button class="btn btn-secondary" t-att-class="{ active: state.tab === 'modules' }" t-on-click="() => this.setTab('modules')">Modules</button>
                     </div>
+                    <button class="btn btn-secondary o_mgu_add_repo" t-att-disabled="state.busy" t-on-click="openAddRepository">
+                        <i class="fa fa-plus me-1"/>Add a repository
+                    </button>
                     <button class="btn btn-secondary" t-att-disabled="state.busy" t-on-click="check">
                         <i t-attf-class="fa {{state.busy ? 'fa-spinner fa-spin' : 'fa-refresh'}} me-1"/>Check GitHub
                     </button>

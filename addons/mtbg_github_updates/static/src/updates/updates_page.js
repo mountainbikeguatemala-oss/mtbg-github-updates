@@ -208,6 +208,10 @@ export class MtbgGithubUpdatesPage extends Component {
         await this.load();
     }
 
+    openAddRepository() {
+        return this.action.doAction("mtbg_github_updates.action_mgu_source_add", { onClose: () => this.load() });
+    }
+
     async addRepository(ev) {
         const box = ev.target.closest(".o_mgu_add_repository");
         const value = (name) => box.querySelector(`input[name="${name}"]`).value;
