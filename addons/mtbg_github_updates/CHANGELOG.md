@@ -2,6 +2,14 @@
 
 Every version of this module, newest first. Tags: `git tag -l 'mtbg_github_updates-*'`.
 
+## 19.0.0.4.3 · 2026-11-11
+- **Roll back works on a server with several workers** (a shop site, 2026-11-11: "3 session(s) of <db> (odoo) are
+  still connected: the database cannot be swapped"): before the swap, new sessions of the database are refused
+  (`ALLOW_CONNECTIONS false`, or `CONNECTION LIMIT 0` for a role that may only change that), its sessions are ended
+  and waited for (up to 5 seconds), then the databases are renamed; the setting is put back afterwards on the kept
+  database, and on the site's own when anything fails. Rehearsed on a copy of that site's test database run with
+  its live setup (3 workers, a cron thread, the websocket worker): 0.4.2 failed as on live, 0.4.3 rolled back.
+
 ## 19.0.0.4.2 · 2026-11-11
 - **No install of a duplicate of an installed module**: a release that would install a module whose models another
   installed module already defines, or with most of its records (5 or more) under another installed module's names

@@ -308,6 +308,104 @@ class TestGithubUpdates(TransactionCase):
                 sql_db.close_db(db)
                 store.drop_database(db)
 
+    def _reconnecting_sessions(self, dbname, count=3):
+        """Processes standing in for a server's workers: each holds a session of ``dbname`` and opens a new one at
+        once when it is ended (0.4.3: what kept a rollback from swapping the database on a multi-worker site)."""
+        import sys
+        from odoo.tools import config as odoo_config
+        code = (
+            "import psycopg2, time, sys\n"
+            "end = time.time() + 40\n"
+            "while time.time() < end:\n"
+            "    try:\n"
+            "        c = psycopg2.connect(dbname=sys.argv[1], user=sys.argv[2] or None, host=sys.argv[3] or None, "
+            "port=sys.argv[4] or None, password=sys.argv[5] or None)\n"
+            "        while time.time() < end:\n"
+            "            c.cursor().execute('SELECT 1'); time.sleep(0.02)\n"
+            "    except Exception:\n"
+            "        time.sleep(0.01)\n")
+        args = [str(odoo_config.get(k) or "") for k in ("db_user", "db_host", "db_port", "db_password")]
+        procs = [subprocess.Popen([sys.executable, "-c", code, dbname] + args) for _i in range(count)]
+        for p in procs:
+            self.addCleanup(p.kill)
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            with closing(sql_db.db_connect("postgres").cursor()) as cr:
+                cr.execute("SELECT count(*) FROM pg_stat_activity WHERE datname = %s", (dbname,))
+                if cr.fetchone()[0] >= count:
+                    break
+            time.sleep(0.1)
+        return procs
+
+    def _allowed(self, dbname):
+        with closing(sql_db.db_connect("postgres").cursor()) as cr:
+            cr.execute("SELECT datallowconn, datconnlimit FROM pg_database WHERE datname = %s", (dbname,))
+            return cr.fetchone()
+
+    def test_swap_with_workers_reconnecting(self):
+        """0.4.3 (a shop site, 2026-11-11: "3 session(s) ... are still connected"): new sessions are refused while
+        the sessions are ended, so the swap goes through; the kept database is open again afterwards."""
+        name, restored, kept = "mgu_w_%s" % os.getpid(), "mgu_w_%s_r" % os.getpid(), "mgu_w_%s_k" % os.getpid()
+        for db in (name, restored, kept):
+            store.drop_database(db)
+        subprocess.run(["createdb", name], check=True, capture_output=True)
+        subprocess.run(["createdb", restored], check=True, capture_output=True)
+        try:
+            procs = self._reconnecting_sessions(name)
+            store.swap_databases(name, restored, kept)
+            self.assertEqual(self._allowed(kept), (True, -1), "the kept database open again, as before")
+            self.assertEqual(self._allowed(name), (True, -1), "the restored one under the site's name, open")
+            for p in procs:
+                p.kill()
+        finally:
+            for db in (name, restored, kept):
+                sql_db.close_db(db)
+                store.drop_database(db)
+
+    def test_swap_failure_reopens_the_database(self):
+        """A swap that fails (here: no restored database to rename) leaves the site's database as it was, open."""
+        name, kept = "mgu_f_%s" % os.getpid(), "mgu_f_%s_k" % os.getpid()
+        store.drop_database(name)
+        subprocess.run(["createdb", name], check=True, capture_output=True)
+        try:
+            self._reconnecting_sessions(name, count=2)
+            with self.assertRaises(Exception):
+                store.swap_databases(name, "mgu_f_%s_missing" % os.getpid(), kept)
+            self.assertEqual(self._allowed(name), (True, -1), "open again after the failure")
+            with closing(sql_db.db_connect("postgres").cursor()) as cr:
+                cr.execute("SELECT count(*) FROM pg_database WHERE datname = %s", (kept,))
+                self.assertEqual(cr.fetchone()[0], 0, "renamed back")
+        finally:
+            sql_db.close_db(name)
+            store.drop_database(name)
+
+    def test_block_connections_for_an_owner_role(self):
+        """A server role that owns its database but is no superuser (as on the shared server): the setting it may
+        change is used, and put back."""
+        with closing(sql_db.db_connect("postgres").cursor()) as cr:
+            cr._cnx.autocommit = True
+            cr.execute("SELECT rolsuper FROM pg_roles WHERE rolname = current_user")
+            if not cr.fetchone()[0]:
+                self.skipTest("needs a superuser to make the test role")
+            name, role = "mgu_o_%s" % os.getpid(), "mgu_owner_%s" % os.getpid()
+            store.drop_database(name)
+            subprocess.run(["createdb", name], check=True, capture_output=True)
+            cr.execute('CREATE ROLE "%s" NOLOGIN CREATEDB' % role)
+            try:
+                cr.execute('ALTER DATABASE "%s" OWNER TO "%s"' % (name, role))
+                cr.execute('SET ROLE "%s"' % role)
+                undo = store._block_connections(cr, name)
+                blocked = self._allowed(name)
+                store._unblock_connections(cr, name, undo)
+                cr.execute("RESET ROLE")
+                self.assertIn(undo[0], ("allow", "limit"))
+                self.assertTrue(blocked == (False, -1) or blocked == (True, 0), blocked)
+                self.assertEqual(self._allowed(name), (True, -1), "put back")
+            finally:
+                cr.execute("RESET ROLE")
+                store.drop_database(name)
+                cr.execute('DROP ROLE IF EXISTS "%s"' % role)
+
     def test_filestore_snapshot_and_swap(self):
         data = os.path.join(self.tmp, "data")
         with patch.dict(config.options, {"data_dir": data}):

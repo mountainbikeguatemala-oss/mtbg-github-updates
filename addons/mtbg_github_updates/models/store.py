@@ -736,9 +736,39 @@ def database_rights(dbname):
     return True, ""
 
 
+SWAP_TRIES = 25          # rounds of ending the sessions before the swap gives up
+SWAP_PAUSE = 0.2         # seconds between two rounds
+
+
+def _block_connections(cr, dbname):
+    """No new session of ``dbname`` (0.4.3: on a server with several workers, they reconnect at once when ended):
+    ALLOW_CONNECTIONS false, else (a role that may not) CONNECTION LIMIT 0. Returns how to undo it."""
+    from odoo.tools.sql import SQL
+    cr.execute("SELECT datallowconn, datconnlimit FROM pg_database WHERE datname = %s", (dbname,))
+    allow, limit = cr.fetchone()
+    try:
+        cr.execute(SQL("ALTER DATABASE %s WITH ALLOW_CONNECTIONS false", SQL.identifier(dbname)))
+        return ("allow", allow)
+    except Exception:  # noqa: BLE001 - not permitted to this role: the connection limit (the owner may set it)
+        cr.execute(SQL("ALTER DATABASE %s WITH CONNECTION LIMIT 0", SQL.identifier(dbname)))
+        return ("limit", limit)
+
+
+def _unblock_connections(cr, name, undo):
+    """The setting ``_block_connections`` changed, back as it was, on the database now called ``name``."""
+    from odoo.tools.sql import SQL
+    what, value = undo
+    if what == "allow":
+        cr.execute(SQL("ALTER DATABASE %s WITH ALLOW_CONNECTIONS %s", SQL.identifier(name),
+                       SQL("true" if value else "false")))
+    else:
+        cr.execute(SQL("ALTER DATABASE %s WITH CONNECTION LIMIT %s", SQL.identifier(name), SQL(str(int(value)))))
+
+
 def swap_databases(dbname, restored, keep_as):
     """``dbname`` becomes ``keep_as`` and ``restored`` becomes ``dbname``: two renames, with every session of
-    ``dbname`` ended first (a rename needs none). Raises when a session of another role is still connected."""
+    ``dbname`` ended first (a rename needs none). New sessions are refused while it happens (0.4.3: a server's
+    workers would reconnect at once), the setting put back afterwards, on failure too. Raises when sessions stay."""
     from contextlib import closing
 
     from odoo import sql_db
@@ -751,20 +781,33 @@ def swap_databases(dbname, restored, keep_as):
     sql_db.close_db(restored)  # this process's own pooled connections (the restore, the history written into it)
     with closing(sql_db.db_connect("postgres").cursor()) as cr:
         cr._cnx.autocommit = True
-        cr.execute("""SELECT pg_terminate_backend(pid) FROM pg_stat_activity
-                       WHERE datname IN (%s, %s) AND pid <> pg_backend_pid()""", (dbname, restored))
-        cr.execute("SELECT count(*), string_agg(DISTINCT usename, ', ') FROM pg_stat_activity WHERE datname = %s",
-                   (dbname,))
-        count, users = cr.fetchone()
-        if count:
-            raise StoreError("%s session(s) of %s (%s) are still connected: the database cannot be swapped"
-                             % (count, dbname, users))
-        cr.execute(SQL("ALTER DATABASE %s RENAME TO %s", SQL.identifier(dbname), SQL.identifier(keep_as)))
+        undo = _block_connections(cr, dbname)
+        holder = dbname  # the name the blocked database has now
         try:
-            cr.execute(SQL("ALTER DATABASE %s RENAME TO %s", SQL.identifier(restored), SQL.identifier(dbname)))
-        except Exception:
-            cr.execute(SQL("ALTER DATABASE %s RENAME TO %s", SQL.identifier(keep_as), SQL.identifier(dbname)))
-            raise
+            count, users = 0, ""
+            for _round in range(SWAP_TRIES):
+                cr.execute("""SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+                               WHERE datname IN (%s, %s) AND pid <> pg_backend_pid()""", (dbname, restored))
+                cr.execute("SELECT count(*), string_agg(DISTINCT usename, ', ') FROM pg_stat_activity "
+                           "WHERE datname = %s AND pid <> pg_backend_pid()", (dbname,))
+                count, users = cr.fetchone()
+                if not count:
+                    break
+                time.sleep(SWAP_PAUSE)
+            if count:
+                raise StoreError("%s session(s) of %s (%s) are still connected: the database cannot be swapped"
+                                 % (count, dbname, users))
+            cr.execute(SQL("ALTER DATABASE %s RENAME TO %s", SQL.identifier(dbname), SQL.identifier(keep_as)))
+            holder = keep_as
+            try:
+                cr.execute(SQL("ALTER DATABASE %s RENAME TO %s", SQL.identifier(restored), SQL.identifier(dbname)))
+            except Exception:
+                cr.execute(SQL("ALTER DATABASE %s RENAME TO %s", SQL.identifier(keep_as), SQL.identifier(dbname)))
+                holder = dbname
+                raise
+        finally:
+            # the kept (or, on failure, the untouched) database open again as it was
+            _unblock_connections(cr, holder, undo)
 
 
 def swap_filestore(dbname, snapshot, keep_as):
